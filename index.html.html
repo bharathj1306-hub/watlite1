@@ -1,0 +1,2444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WattWise — Personal Household Energy Optimizer</title>
+<meta name="description" content="Smarter energy decisions. Lower estimated bills.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://unpkg.com/lucide@0.462.0/dist/umd/lucide.js"></script>
+
+<style>
+/* ============================================================
+   WATTWISE — DESIGN TOKENS
+   Palette: deep charcoal-navy field, single emerald signal color
+   used sparingly to mean "this is where energy/decisions live".
+   Display face: Space Grotesk (engineered, geometric — reads like
+   a metering/instrumentation product, not a generic dashboard).
+   Body: Inter. Data/mono: IBM Plex Mono for every number that is
+   a measurement (kWh, ₹, formulas) — numbers get their own voice.
+   ============================================================ */
+:root{
+  --bg: #07111F;
+  --bg-elevated: #0A1626;
+  --card: #0D1B2A;
+  --card-hover: #10233A;
+  --border: rgba(148,163,184,0.12);
+  --border-strong: rgba(148,163,184,0.22);
+
+  --primary: #22C55E;
+  --primary-soft: rgba(34,197,94,0.14);
+  --primary-dim: rgba(34,197,94,0.35);
+  --secondary: #34D399;
+
+  --amber: #F59E0B;
+  --amber-soft: rgba(245,158,11,0.14);
+  --red: #F87171;
+  --red-soft: rgba(248,113,113,0.14);
+  --blue: #38BDF8;
+  --blue-soft: rgba(56,189,248,0.14);
+
+  --text: #F8FAFC;
+  --text-dim: #B9C4D4;
+  --muted: #7E8CA3;
+  --faint: #55637A;
+
+  --radius-sm: 10px;
+  --radius: 16px;
+  --radius-lg: 22px;
+
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.03) inset, 0 10px 30px -12px rgba(0,0,0,0.55);
+  --shadow-pop: 0 20px 60px -15px rgba(0,0,0,0.7);
+
+  --font-display: 'Space Grotesk', 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  --sidebar-w: 240px;
+  --topbar-h: 64px;
+}
+
+*{ box-sizing: border-box; }
+html{ scroll-behavior: smooth; }
+body{
+  margin:0;
+  background:
+    radial-gradient(1100px 600px at 85% -10%, rgba(34,197,94,0.09), transparent 60%),
+    radial-gradient(900px 500px at -10% 20%, rgba(56,189,248,0.05), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  min-height:100vh;
+}
+h1,h2,h3,h4{ font-family: var(--font-display); margin:0; letter-spacing:-0.01em; }
+p{ margin:0; }
+.num, .mono{ font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+a{ color:inherit; }
+button{ font-family: inherit; }
+::selection{ background: var(--primary-dim); color:#fff; }
+
+/* focus visibility */
+button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible{
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* scrollbar */
+::-webkit-scrollbar{ width:10px; height:10px; }
+::-webkit-scrollbar-track{ background:transparent; }
+::-webkit-scrollbar-thumb{ background: rgba(148,163,184,0.18); border-radius:10px; }
+::-webkit-scrollbar-thumb:hover{ background: rgba(148,163,184,0.3); }
+
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior:auto !important; }
+}
+
+/* ---------------- App shell ---------------- */
+.app-shell{ display:flex; min-height:100vh; }
+
+/* Sidebar */
+.sidebar{
+  width: var(--sidebar-w);
+  flex-shrink:0;
+  background: linear-gradient(180deg, var(--bg-elevated), var(--bg));
+  border-right: 1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  position: sticky;
+  top:0;
+  height:100vh;
+  z-index: 40;
+}
+.brand{
+  display:flex; align-items:center; gap:10px;
+  padding: 20px 20px 16px 20px;
+}
+.brand-mark{
+  width:34px; height:34px; border-radius:10px;
+  background: linear-gradient(145deg, var(--primary), #0EA5E9);
+  display:flex; align-items:center; justify-content:center;
+  box-shadow: 0 6px 18px -4px rgba(34,197,94,0.55);
+  flex-shrink:0;
+}
+.brand-mark svg{ width:18px; height:18px; color:#07111F; }
+.brand-name{ font-family: var(--font-display); font-weight:700; font-size:17px; letter-spacing:-0.02em; }
+.brand-tag{ font-size:10.5px; color: var(--faint); margin-top:1px; letter-spacing:0.02em; }
+
+.nav-list{ list-style:none; margin:8px 0 0 0; padding: 4px 12px; display:flex; flex-direction:column; gap:2px; flex:1; overflow-y:auto; }
+.nav-item{
+  display:flex; align-items:center; gap:11px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size:13.5px; font-weight:600;
+  cursor:pointer;
+  border:none; background:transparent; width:100%; text-align:left;
+  position:relative;
+  transition: color .15s ease, background .15s ease;
+}
+.nav-item svg{ width:17px; height:17px; flex-shrink:0; opacity:0.85; }
+.nav-item:hover{ color: var(--text); background: rgba(148,163,184,0.06); }
+.nav-item.active{ color: var(--text); background: var(--primary-soft); }
+.nav-item.active::before{
+  content:''; position:absolute; left:-12px; top:8px; bottom:8px; width:3px;
+  background: var(--primary); border-radius:0 3px 3px 0;
+}
+.nav-item.active svg{ color: var(--primary); opacity:1; }
+.nav-item .lock-badge{ margin-left:auto; opacity:0.5; }
+.nav-item:disabled{ opacity:0.4; cursor:not-allowed; }
+
+.sidebar-footer{
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--border);
+  font-size:11px; color: var(--faint);
+  display:flex; align-items:center; gap:8px;
+}
+.pulse-dot{ width:7px; height:7px; border-radius:50%; background: var(--primary); box-shadow:0 0 0 3px var(--primary-soft); animation: pulse 2.2s infinite; flex-shrink:0; }
+@keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:0.45; } }
+
+/* Topbar (mobile) */
+.topbar{
+  display:none;
+  position: sticky; top:0; z-index:50;
+  height: var(--topbar-h);
+  align-items:center; justify-content:space-between;
+  padding: 0 16px;
+  background: rgba(7,17,31,0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+.hamburger{ background:none; border:1px solid var(--border-strong); border-radius:9px; width:38px; height:38px; display:flex; align-items:center; justify-content:center; color:var(--text); }
+
+/* Main */
+.main-wrap{ flex:1; min-width:0; display:flex; flex-direction:column; }
+.topstrip{
+  display:flex; align-items:center; justify-content:flex-end; gap:10px;
+  padding: 16px 32px 0 32px;
+}
+.status-chip{
+  display:flex; align-items:center; gap:7px;
+  font-size:12.5px; color: var(--text-dim); font-weight:500;
+  padding: 7px 12px; border-radius:99px; border:1px solid var(--border); background: var(--card);
+}
+.main{ padding: 20px 32px 64px; flex:1; }
+
+.view{ display:none; animation: fadeUp .35s ease both; }
+.view.active{ display:block; }
+@keyframes fadeUp{ from{ opacity:0; transform: translateY(8px);} to{ opacity:1; transform:none; } }
+
+/* ---------------- Buttons ---------------- */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  font-weight:700; font-size:13.5px; font-family: var(--font-body);
+  padding: 12px 20px; border-radius: 12px; border:1px solid transparent;
+  cursor:pointer; transition: transform .12s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+  white-space:nowrap;
+}
+.btn svg{ width:16px; height:16px; }
+.btn:active{ transform: scale(0.97); }
+.btn-primary{
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: #052E16; box-shadow: 0 8px 24px -8px rgba(34,197,94,0.55);
+}
+.btn-primary:hover{ box-shadow: 0 10px 30px -8px rgba(34,197,94,0.7); }
+.btn-secondary{
+  background: var(--card); border-color: var(--border-strong); color: var(--text);
+}
+.btn-secondary:hover{ background: var(--card-hover); border-color: var(--primary-dim); }
+.btn-ghost{ background: transparent; border-color: transparent; color: var(--text-dim); padding:10px 14px; }
+.btn-ghost:hover{ color: var(--text); background: rgba(148,163,184,0.08); }
+.btn-danger{ background: var(--red-soft); color: var(--red); border-color: rgba(248,113,113,0.25); }
+.btn-sm{ padding: 8px 13px; font-size:12.5px; border-radius:9px; }
+.btn-block{ width:100%; }
+.btn:disabled{ opacity:0.45; cursor:not-allowed; box-shadow:none; }
+.btn-icon{ width:36px; height:36px; padding:0; border-radius:9px; }
+
+/* ---------------- Layout helpers ---------------- */
+.page-head{ margin-bottom: 26px; display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.page-head h1{ font-size: 26px; }
+.page-sub{ color: var(--muted); font-size:14.5px; margin-top:6px; max-width:56ch; }
+.eyebrow{ font-size:11.5px; letter-spacing:0.12em; text-transform:uppercase; color: var(--primary); font-weight:700; margin-bottom:8px; }
+
+.grid{ display:grid; gap:16px; }
+.grid-4{ grid-template-columns: repeat(4, 1fr); }
+.grid-3{ grid-template-columns: repeat(3, 1fr); }
+.grid-2{ grid-template-columns: 1fr 1fr; }
+@media (max-width: 1100px){ .grid-4{ grid-template-columns: repeat(2,1fr);} .grid-3{ grid-template-columns: repeat(2,1fr);} }
+@media (max-width: 720px){ .grid-4,.grid-3,.grid-2{ grid-template-columns: 1fr; } }
+
+.card{
+  background: linear-gradient(180deg, var(--card), var(--card) 60%, #0B1826);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+  box-shadow: var(--shadow-card);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.card.hoverable:hover{ transform: translateY(-3px); border-color: var(--border-strong); }
+.card-flat{ background: var(--card); border:1px solid var(--border); border-radius: var(--radius); padding:18px; }
+
+/* KPI cards */
+.kpi{ display:flex; flex-direction:column; gap:10px; position:relative; overflow:hidden; }
+.kpi-top{ display:flex; align-items:center; justify-content:space-between; }
+.kpi-icon{ width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; }
+.kpi-icon svg{ width:18px; height:18px; }
+.kpi-icon.green{ background: var(--primary-soft); color: var(--primary); }
+.kpi-icon.blue{ background: var(--blue-soft); color: var(--blue); }
+.kpi-icon.amber{ background: var(--amber-soft); color: var(--amber); }
+.kpi-icon.red{ background: var(--red-soft); color: var(--red); }
+.kpi-label{ font-size:12.5px; color: var(--muted); font-weight:600; }
+.kpi-value{ font-family: var(--font-mono); font-size:30px; font-weight:600; letter-spacing:-0.01em; }
+.kpi-value .unit{ font-size:14px; color: var(--muted); font-weight:500; margin-left:5px; }
+.kpi-foot{ font-size:12px; color: var(--faint); }
+.trend-pill{ font-size:11px; font-weight:700; padding:3px 8px; border-radius:99px; display:inline-flex; align-items:center; gap:4px; }
+.trend-pill.up{ background: var(--red-soft); color: var(--red); }
+.trend-pill.down{ background: var(--primary-soft); color: var(--primary); }
+
+/* Badges */
+.badge{ font-size:10.5px; font-weight:800; letter-spacing:0.05em; padding: 4px 9px; border-radius:99px; text-transform:uppercase; display:inline-flex; align-items:center; gap:5px; }
+.badge-essential{ background: var(--blue-soft); color: var(--blue); }
+.badge-flexible{ background: var(--primary-soft); color: var(--primary); }
+.badge-demo{ background: var(--amber-soft); color: var(--amber); }
+
+/* ---------------- Hero / landing ---------------- */
+.hero{ padding: 48px 8px 20px; position:relative; }
+.hero-grid{ display:grid; grid-template-columns: 1.1fr 0.9fr; gap: 40px; align-items:center; }
+@media (max-width: 980px){ .hero-grid{ grid-template-columns:1fr; } }
+.hero-eyebrow{ display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color: var(--primary); background: var(--primary-soft); padding:7px 13px; border-radius:99px; margin-bottom:22px; letter-spacing:0.03em; }
+.hero h1{ font-size: 46px; line-height:1.06; letter-spacing:-0.02em; }
+.hero h1 .accent{ background: linear-gradient(120deg, var(--primary), var(--secondary) 60%, #7DD3FC); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.hero-sub{ margin-top:20px; font-size:16px; color: var(--text-dim); max-width: 46ch; line-height:1.6; }
+.hero-actions{ display:flex; gap:12px; margin-top:30px; flex-wrap:wrap; }
+.hero-actions .btn{ padding:14px 24px; font-size:14.5px; }
+
+.value-props{ display:flex; gap:14px; margin-top:12px; }
+.value-line{ font-family: var(--font-display); font-size:15px; color: var(--text-dim); border-left:2px solid var(--primary-dim); padding-left:14px; line-height:1.5; max-width:60ch; margin-top:26px; }
+.value-line strong{ color:var(--text); }
+
+/* Feature cards */
+.feature-card{ padding:20px; }
+.feature-icon{ width:38px; height:38px; border-radius:11px; background: var(--primary-soft); color:var(--primary); display:flex; align-items:center; justify-content:center; margin-bottom:14px; }
+.feature-icon svg{ width:19px; height:19px; }
+.feature-card h3{ font-size:15.5px; margin-bottom:6px; }
+.feature-card p{ font-size:13.5px; color: var(--muted); line-height:1.55; }
+
+/* Energy flow visual */
+.flow-visual{ position:relative; height: 380px; }
+.flow-svg{ width:100%; height:100%; }
+.flow-node-label{ font-family: var(--font-mono); font-size:10.5px; fill: var(--text-dim); text-anchor:middle; }
+.flow-particle{ animation: dash 3.5s linear infinite; }
+@keyframes dash{ to{ stroke-dashoffset: -200; } }
+@keyframes floaty{ 0%,100%{ transform: translateY(0);} 50%{ transform: translateY(-6px);} }
+
+/* Mini dashboard preview */
+.preview-strip{ margin-top:46px; }
+.preview-card{ padding:16px 18px; }
+
+/* ---------------- Forms ---------------- */
+.field{ display:flex; flex-direction:column; gap:7px; margin-bottom:16px; }
+.field label{ font-size:12.5px; font-weight:600; color: var(--text-dim); }
+.field .hint{ font-size:11.5px; color: var(--faint); }
+.input, select.input{
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 11px; padding: 11px 13px; font-size:14px;
+  font-family: var(--font-body);
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  width:100%;
+}
+.input:focus{ outline:none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); background: rgba(255,255,255,0.03); }
+.input.invalid{ border-color: var(--red); box-shadow: 0 0 0 3px var(--red-soft); }
+.field-error{ font-size:11.5px; color: var(--red); display:none; align-items:center; gap:5px; }
+.field-error.show{ display:flex; }
+.input-group{ position:relative; display:flex; align-items:center; }
+.input-prefix{ position:absolute; left:13px; color: var(--muted); font-size:13.5px; font-family:var(--font-mono); pointer-events:none; }
+.input-group .input{ padding-left:30px; }
+.input-suffix{ position:absolute; right:13px; color: var(--muted); font-size:12px; pointer-events:none; }
+
+.segmented{ display:inline-flex; background: rgba(255,255,255,0.03); border:1px solid var(--border-strong); border-radius:11px; padding:3px; gap:2px; }
+.segmented button{ border:none; background:transparent; color: var(--muted); font-size:13px; font-weight:700; padding:9px 18px; border-radius:8px; cursor:pointer; transition: all .15s ease; }
+.segmented button.active{ background: var(--primary); color:#052E16; }
+
+.toggle-pair{ display:inline-flex; background: rgba(255,255,255,0.03); border:1px solid var(--border-strong); border-radius:11px; padding:3px; gap:2px; }
+.toggle-pair button{ border:none; background:transparent; color: var(--muted); font-size:12.5px; font-weight:700; padding:8px 14px; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; }
+.toggle-pair button.active.essential{ background: var(--blue-soft); color: var(--blue); }
+.toggle-pair button.active.flexible{ background: var(--primary-soft); color: var(--primary); }
+
+/* ---------------- Modal ---------------- */
+.modal-backdrop{
+  position:fixed; inset:0; background: rgba(3,8,16,0.72); backdrop-filter: blur(3px);
+  display:none; align-items:center; justify-content:center; z-index:200; padding:20px;
+}
+.modal-backdrop.open{ display:flex; animation: fadeIn .18s ease; }
+@keyframes fadeIn{ from{ opacity:0;} to{ opacity:1;} }
+.modal{
+  background: linear-gradient(180deg, #0F2033, #0B1727);
+  border:1px solid var(--border-strong); border-radius: var(--radius-lg);
+  width: 100%; max-width: 560px; max-height:88vh; overflow-y:auto;
+  box-shadow: var(--shadow-pop);
+  animation: modalIn .22s cubic-bezier(.2,.9,.3,1.2);
+}
+@keyframes modalIn{ from{ opacity:0; transform: translateY(14px) scale(.97);} to{ opacity:1; transform:none; } }
+.modal-head{ display:flex; align-items:center; justify-content:space-between; padding: 20px 24px; border-bottom:1px solid var(--border); position:sticky; top:0; background: inherit; z-index:2;}
+.modal-head h3{ font-size:17px; }
+.modal-close{ background:none; border:none; color: var(--muted); cursor:pointer; width:32px; height:32px; border-radius:9px; display:flex; align-items:center; justify-content:center; }
+.modal-close:hover{ background: rgba(148,163,184,0.1); color:var(--text); }
+.modal-body{ padding: 22px 24px; }
+.modal-foot{ padding: 16px 24px 22px; display:flex; gap:10px; justify-content:flex-end; border-top:1px solid var(--border); }
+
+/* ---------------- Appliance cards ---------------- */
+.appliance-card{ padding:18px; display:flex; flex-direction:column; gap:12px; }
+.appliance-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.appliance-icon-name{ display:flex; align-items:center; gap:11px; }
+.appliance-icon{ width:38px; height:38px; border-radius:10px; background: rgba(255,255,255,0.04); display:flex; align-items:center; justify-content:center; color: var(--secondary); flex-shrink:0; }
+.appliance-icon svg{ width:18px; height:18px; }
+.appliance-name{ font-weight:700; font-size:14.5px; }
+.appliance-meta{ font-size:11.5px; color: var(--faint); margin-top:2px; }
+.appliance-specs{ display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color: var(--text-dim); }
+.appliance-specs span b{ font-family: var(--font-mono); color: var(--text); font-weight:600; }
+.appliance-result{ display:flex; align-items:center; justify-content:space-between; padding-top:12px; border-top:1px dashed var(--border); }
+.appliance-result .kwh{ font-family: var(--font-mono); font-size:19px; font-weight:600; color: var(--primary); }
+.appliance-result .cost{ font-family: var(--font-mono); font-size:13px; color: var(--muted); }
+.appliance-actions{ display:flex; gap:6px; }
+.icon-link{ background:none; border:none; color: var(--muted); cursor:pointer; width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; }
+.icon-link:hover{ background: rgba(148,163,184,0.1); color: var(--text); }
+.icon-link.danger:hover{ background: var(--red-soft); color: var(--red); }
+
+/* calc formula block */
+.formula-block{ background: rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:12px; padding:16px 18px; font-family: var(--font-mono); font-size:13px; color: var(--text-dim); line-height:1.7; }
+.formula-block .result-line{ color: var(--primary); font-weight:600; border-top:1px solid var(--border); margin-top:8px; padding-top:8px; }
+
+/* ---------------- Insights ---------------- */
+.insight-card{ display:flex; gap:14px; padding:16px 18px; }
+.insight-icon{ width:34px; height:34px; border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+.insight-title{ font-weight:700; font-size:13.5px; margin-bottom:4px; }
+.insight-text{ font-size:13px; color: var(--text-dim); line-height:1.55; }
+
+/* ---------------- Charts ---------------- */
+.chart-card{ padding:20px 22px; }
+.chart-card h3{ font-size:15px; }
+.chart-card .sub{ font-size:12px; color:var(--muted); margin-top:3px; }
+.chart-wrap{ position:relative; height: 260px; margin-top:16px; }
+.chart-wrap.donut{ height:220px; }
+
+/* ---------------- Target ring ---------------- */
+.ring-wrap{ display:flex; align-items:center; justify-content:center; position:relative; }
+.ring-center{ position:absolute; display:flex; flex-direction:column; align-items:center; }
+.ring-pct{ font-family: var(--font-mono); font-size:30px; font-weight:700; }
+.ring-caption{ font-size:10.5px; color: var(--muted); letter-spacing:0.08em; text-transform:uppercase; margin-top:2px; }
+
+/* Progress bar (linear) */
+.progress-track{ height:10px; border-radius:99px; background: rgba(255,255,255,0.06); overflow:hidden; position:relative; margin: 14px 0 8px; }
+.progress-fill{ height:100%; border-radius:99px; background: linear-gradient(90deg, var(--blue), var(--primary)); transition: width .8s cubic-bezier(.2,.8,.2,1); position:relative; }
+.progress-marker{ position:absolute; top:-6px; width:2px; height:22px; background: var(--amber); }
+.progress-labels{ display:flex; justify-content:space-between; font-size:11.5px; color: var(--muted); }
+
+/* ---------------- Optimizer ---------------- */
+.optimize-cta-wrap{ display:flex; justify-content:center; margin: 30px 0 10px; }
+.optimize-cta{ padding:17px 34px; font-size:15px; border-radius:14px; }
+.loading-lines{ text-align:center; margin-top:18px; }
+.loading-line{ font-size:12.5px; color: var(--muted); font-family: var(--font-mono); opacity:0; transition: opacity .25s ease; margin-bottom:4px; }
+.loading-line.show{ opacity:1; color: var(--primary); }
+.spinner{ width:20px; height:20px; border-radius:50%; border:2.5px solid var(--border-strong); border-top-color: var(--primary); animation: spin 0.8s linear infinite; margin: 0 auto 14px; }
+@keyframes spin{ to{ transform: rotate(360deg); } }
+
+.protected-row, .flexible-row{ display:flex; align-items:center; justify-content:space-between; padding: 13px 4px; border-bottom:1px solid var(--border); }
+.protected-row:last-child, .flexible-row:last-child{ border-bottom:none; }
+.protected-name{ display:flex; align-items:center; gap:10px; font-size:13.5px; font-weight:600; }
+.protected-name svg{ width:15px; height:15px; color: var(--blue); }
+.flexible-detail{ font-size:11.5px; color: var(--muted); margin-top:2px; }
+
+/* result compare */
+.compare-wrap{ display:grid; grid-template-columns: 1fr auto 1fr; gap:18px; align-items:center; margin-top:10px; }
+@media (max-width:820px){ .compare-wrap{ grid-template-columns:1fr; } .compare-arrow{ transform: rotate(90deg); margin:4px auto;} }
+.compare-card{ text-align:center; padding:26px 18px; }
+.compare-card .tag{ font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:12px; }
+.compare-card.current .tag{ color: var(--muted); }
+.compare-card.optimized .tag{ color: var(--primary); }
+.compare-card .big{ font-family: var(--font-mono); font-size:32px; font-weight:700; }
+.compare-card .cost{ font-family: var(--font-mono); font-size:16px; color: var(--text-dim); margin-top:6px; }
+.compare-arrow{ display:flex; flex-direction:column; align-items:center; gap:6px; color: var(--primary); }
+.compare-arrow svg{ width:26px; height:26px; }
+
+.savings-summary{
+  margin-top: 26px;
+  text-align:center; padding: 34px 20px;
+  background: radial-gradient(600px 200px at 50% -30%, rgba(34,197,94,0.22), transparent), var(--card);
+  border: 1px solid var(--primary-dim); border-radius: var(--radius-lg);
+}
+.savings-summary .label{ font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color: var(--primary); font-weight:800; margin-bottom:14px; }
+.savings-summary .figures{ display:flex; gap:34px; justify-content:center; flex-wrap:wrap; }
+.savings-summary .figure-num{ font-family: var(--font-mono); font-size:38px; font-weight:700; color: var(--text); }
+.savings-summary .figure-unit{ font-size:12.5px; color: var(--muted); margin-top:2px; }
+.savings-summary .note{ font-size:12px; color: var(--faint); margin-top:16px; }
+
+.feasibility-banner{ display:flex; align-items:flex-start; gap:14px; padding:18px 20px; border-radius: var(--radius); margin-top:20px; border:1px solid; }
+.feasibility-banner.achieved{ background: var(--primary-soft); border-color: var(--primary-dim); }
+.feasibility-banner.partial{ background: var(--amber-soft); border-color: rgba(245,158,11,0.35); }
+.feasibility-banner.not{ background: var(--red-soft); border-color: rgba(248,113,113,0.3); }
+.feasibility-banner .fi{ width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; background: rgba(255,255,255,0.08); }
+.feasibility-banner h4{ font-size:14.5px; margin-bottom:4px; }
+.feasibility-banner p{ font-size:13px; color: var(--text-dim); line-height:1.5; }
+
+/* recommendation cards */
+.rec-card{ padding:0; overflow:hidden; }
+.rec-head{ display:flex; align-items:center; justify-content:space-between; padding: 18px 20px; cursor:pointer; gap:14px; }
+.rec-title{ display:flex; align-items:center; gap:12px; }
+.rec-title .ic{ width:34px; height:34px; border-radius:10px; background: var(--primary-soft); color: var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.rec-title h4{ font-size:14.5px; }
+.rec-change{ font-size:12px; color: var(--muted); font-family: var(--font-mono); margin-top:2px; }
+.rec-savings{ text-align:right; flex-shrink:0; }
+.rec-savings .k{ font-family: var(--font-mono); color: var(--primary); font-weight:700; font-size:15px; }
+.rec-savings .c{ font-family: var(--font-mono); color: var(--muted); font-size:11.5px; }
+.rec-chevron{ transition: transform .2s ease; color: var(--muted); flex-shrink:0; }
+.rec-card.open .rec-chevron{ transform: rotate(180deg); }
+.rec-body{ max-height:0; overflow:hidden; transition: max-height .3s ease; border-top:1px solid transparent; }
+.rec-card.open .rec-body{ max-height: 420px; border-top:1px solid var(--border); }
+.rec-body-inner{ padding: 18px 20px 20px; }
+.rec-reason{ font-size:13px; color: var(--text-dim); line-height:1.6; margin-bottom:14px; }
+.rec-why-label{ font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--faint); font-weight:700; margin-bottom:8px; }
+
+/* ---------------- What-If ---------------- */
+.whatif-panel{ display:grid; grid-template-columns: 1fr 1.3fr; gap:20px; }
+@media (max-width:900px){ .whatif-panel{ grid-template-columns:1fr; } }
+.slider-row{ margin-bottom:22px; }
+.slider-row .slider-label{ display:flex; justify-content:space-between; font-size:13px; margin-bottom:9px; }
+.slider-row .slider-label b{ font-family: var(--font-mono); color: var(--primary); }
+input[type=range]{ -webkit-appearance:none; width:100%; height:6px; border-radius:99px; background: rgba(255,255,255,0.08); outline:none; }
+input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background: var(--primary); cursor:pointer; box-shadow: 0 0 0 4px var(--primary-soft); border:2px solid #052E16; }
+input[type=range]::-moz-range-thumb{ width:18px; height:18px; border-radius:50%; background: var(--primary); cursor:pointer; border:2px solid #052E16; }
+
+.wi-compare{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.wi-box{ padding:18px; text-align:center; }
+.wi-box .lab{ font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); font-weight:700; margin-bottom:10px; }
+.wi-box .v{ font-family: var(--font-mono); font-size:26px; font-weight:700; transition: all .25s ease; }
+.wi-box .c{ font-family: var(--font-mono); font-size:13px; color: var(--muted); margin-top:4px; }
+.wi-diff{ margin-top:16px; text-align:center; padding: 16px; border-radius: var(--radius); background: var(--primary-soft); border:1px solid var(--primary-dim); }
+.wi-diff .d1{ font-family: var(--font-mono); font-size:24px; font-weight:700; color: var(--primary); }
+.wi-diff .d2{ font-size:12px; color: var(--text-dim); margin-top:4px; }
+
+/* ---------------- Results / report ---------------- */
+.report-section{ margin-bottom: 26px; }
+.report-section h3{ font-size:15px; margin-bottom:12px; display:flex; align-items:center; gap:9px; }
+.report-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; }
+.report-list li{ display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background: var(--card-flat); border:1px solid var(--border); border-radius:11px; font-size:13px; }
+.report-list li b{ font-family: var(--font-mono); color: var(--primary); }
+.assumptions{ font-size:12.5px; color: var(--muted); line-height:1.8; }
+.assumptions p{ margin-bottom:8px; padding-left:16px; position:relative; }
+.assumptions p::before{ content:'—'; position:absolute; left:0; color: var(--faint); }
+
+/* ---------------- Empty / error / loading overlays ---------------- */
+.empty-state{ text-align:center; padding: 60px 20px; }
+.empty-state .ic{ width:56px; height:56px; border-radius:16px; background: var(--primary-soft); color: var(--primary); display:flex; align-items:center; justify-content:center; margin: 0 auto 18px; }
+.empty-state h3{ font-size:17px; margin-bottom:8px; }
+.empty-state p{ font-size:13.5px; color: var(--muted); max-width:40ch; margin: 0 auto 20px; }
+
+.notice{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:11px; font-size:12.5px; margin-bottom:18px; border:1px solid; }
+.notice.warn{ background: var(--amber-soft); border-color: rgba(245,158,11,0.3); color:#FCD34D; }
+.notice.error{ background: var(--red-soft); border-color: rgba(248,113,113,0.3); color:#FCA5A5; }
+.notice svg{ width:16px; height:16px; flex-shrink:0; }
+
+.error-block{ text-align:center; padding:50px 20px; }
+.error-block .ic{ color: var(--red); margin-bottom:14px; }
+.error-block h3{ font-size:16px; margin-bottom:8px; }
+.error-block p{ color: var(--muted); font-size:13.5px; margin-bottom:20px; }
+.error-actions{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+
+.skeleton{ background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 37%, rgba(255,255,255,0.04) 63%); background-size:400% 100%; animation: shimmer 1.4s ease infinite; border-radius:10px; }
+@keyframes shimmer{ 0%{ background-position:100% 0;} 100%{ background-position:0 0;} }
+
+/* toasts */
+#toast-region{ position:fixed; bottom:22px; right:22px; z-index:400; display:flex; flex-direction:column; gap:10px; }
+.toast{ background: #0F2033; border:1px solid var(--border-strong); border-radius:12px; padding:13px 16px; font-size:13px; display:flex; align-items:center; gap:10px; box-shadow: var(--shadow-pop); animation: toastIn .25s ease; min-width:240px; }
+@keyframes toastIn{ from{ opacity:0; transform: translateY(10px);} to{ opacity:1; transform:none;} }
+.toast .ic{ width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.toast.success .ic{ background: var(--primary-soft); color:var(--primary); }
+.toast.error .ic{ background: var(--red-soft); color:var(--red); }
+.toast.info .ic{ background: var(--blue-soft); color:var(--blue); }
+
+/* section divider header w/ button */
+.section-flex{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
+
+.help-note{ font-size:11.5px; color: var(--faint); margin-top:8px; display:flex; align-items:center; gap:6px; }
+
+/* mobile sidebar drawer */
+.sidebar-scrim{ display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:39; }
+.sidebar-scrim.open{ display:block; }
+
+@media (max-width: 900px){
+  .topbar{ display:flex; }
+  .sidebar{ position:fixed; left:-260px; top:0; transition: left .25s ease; box-shadow: var(--shadow-pop); }
+  .sidebar.open{ left:0; }
+  .topstrip{ display:none; }
+  .main{ padding: 18px 16px 60px; }
+  .hero{ padding: 20px 4px 10px; }
+  .hero h1{ font-size:32px; }
+}
+
+/* print */
+@media print{
+  .sidebar, .topbar, .topstrip, .no-print{ display:none !important; }
+  body{ background:#fff; color:#000; }
+  .card, .card-flat{ border:1px solid #ccc; background:#fff; box-shadow:none; }
+  .main{ padding:0; }
+  .view{ display:none !important; }
+  #view-results{ display:block !important; }
+  .kpi-value, .compare-card .big{ color:#000; }
+}
+
+/* ============================================================
+   WATTWISE 10/10 VISUAL LAYER — DATA-DRIVEN 3D SYSTEM
+   Pure CSS 3D: no extra library, keeps the single-file app fast.
+   ============================================================ */
+:root{
+  --electric:#39f58a;
+  --electric-blue:#38bdf8;
+  --electric-gold:#facc15;
+  --ww-depth: 22px;
+}
+
+/* native select visibility fix */
+select.input{
+  color:var(--text) !important;
+  background-color:#0D1B2A !important;
+  color-scheme:dark;
+}
+select.input option,
+select.input optgroup{
+  background:#0D1B2A !important;
+  color:#F8FAFC !important;
+}
+select.input option:checked{ background:#17324A !important; color:#fff !important; }
+select.input:hover{ border-color:rgba(56,189,248,.38); }
+
+/* premium interaction polish */
+.card, .card-flat, .btn, .nav-item, .input{ transition:transform .22s ease, box-shadow .22s ease, border-color .22s ease, background .22s ease; }
+.hoverable:hover{ transform:translateY(-3px); }
+.btn-primary:hover{ transform:translateY(-2px); box-shadow:0 12px 30px -12px rgba(34,197,94,.65); }
+
+/* 3D stage */
+.ww3d-stage{
+  position:relative;
+  min-height:330px;
+  margin:18px 0 26px;
+  padding:22px;
+  border:1px solid rgba(148,163,184,.12);
+  border-radius:24px;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(34,197,94,.10), transparent 34%),
+    linear-gradient(135deg,rgba(13,27,42,.94),rgba(7,17,31,.88));
+  box-shadow:0 25px 70px -35px rgba(0,0,0,.85), inset 0 1px 0 rgba(255,255,255,.04);
+  isolation:isolate;
+}
+.ww3d-stage::before{
+  content:""; position:absolute; inset:-40%; z-index:-2;
+  background:conic-gradient(from 0deg,transparent 0 30%,rgba(56,189,248,.05) 38%,transparent 46% 60%,rgba(34,197,94,.06) 68%,transparent 76%);
+  animation:wwSpin 24s linear infinite;
+}
+.ww3d-stage::after{
+  content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);
+  background-size:34px 34px;
+  mask-image:linear-gradient(to bottom,transparent,#000 22%,#000 78%,transparent);
+}
+@keyframes wwSpin{to{transform:rotate(360deg)}}
+.ww3d-head{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:8px;position:relative;z-index:4}
+.ww3d-kicker{font:700 10px var(--font-mono);letter-spacing:.14em;color:var(--primary);text-transform:uppercase}
+.ww3d-title{font:700 18px var(--font-display);margin-top:4px}
+.ww3d-caption{font-size:12px;color:var(--muted);max-width:52ch}
+.ww3d-badge{padding:7px 10px;border-radius:999px;border:1px solid rgba(34,197,94,.2);background:rgba(34,197,94,.08);color:#86efac;font:600 10px var(--font-mono);white-space:nowrap}
+.ww3d-world{position:relative;height:245px;perspective:1100px;transform-style:preserve-3d}
+.ww3d-grid{position:absolute;left:4%;right:4%;bottom:7px;height:105px;transform:rotateX(68deg) translateZ(-30px);transform-origin:bottom;opacity:.55;background-image:linear-gradient(rgba(56,189,248,.09) 1px,transparent 1px),linear-gradient(90deg,rgba(56,189,248,.09) 1px,transparent 1px);background-size:28px 28px;mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent)}
+.ww3d-node{position:absolute;display:flex;flex-direction:column;align-items:center;gap:7px;transform-style:preserve-3d;cursor:default;transition:transform .25s ease,filter .25s ease}
+.ww3d-node:hover{transform:translateY(-8px) scale(1.05);filter:brightness(1.15)}
+.ww3d-orb{width:64px;height:64px;border-radius:20px;display:grid;place-items:center;background:linear-gradient(145deg,rgba(20,40,58,.96),rgba(7,17,31,.96));border:1px solid rgba(255,255,255,.12);box-shadow:0 20px 45px -22px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.08), 0 0 28px rgba(34,197,94,.10);transform:translateZ(22px) rotateX(5deg) rotateY(-5deg)}
+.ww3d-orb svg{width:28px;height:28px;color:var(--electric);filter:drop-shadow(0 0 8px rgba(34,197,94,.55))}
+.ww3d-node-label{text-align:center;font:700 10px var(--font-mono);letter-spacing:.06em;color:var(--text-dim)}
+.ww3d-node-meta{font-size:10px;color:var(--muted);font-family:var(--font-mono)}
+.ww3d-path{position:absolute;height:3px;border-radius:99px;background:linear-gradient(90deg,transparent,var(--electric),transparent);box-shadow:0 0 16px rgba(34,197,94,.65);transform-origin:left center;animation:wwFlow 2.2s linear infinite;opacity:.9}
+.ww3d-path::after{content:"";position:absolute;right:-2px;top:50%;width:9px;height:9px;border-radius:50%;background:#fff;box-shadow:0 0 18px 4px var(--electric);transform:translateY(-50%)}
+@keyframes wwFlow{0%{opacity:.15;filter:brightness(.7)}35%,70%{opacity:1;filter:brightness(1.35)}100%{opacity:.15;filter:brightness(.7)}}
+.ww3d-particle{position:absolute;width:6px;height:6px;border-radius:50%;background:#fff;box-shadow:0 0 15px 4px var(--electric);animation:wwParticle 3s linear infinite}
+@keyframes wwParticle{0%{transform:translate3d(0,0,30px);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translate3d(var(--dx),var(--dy),80px);opacity:0}}
+
+/* Overview pipeline */
+.ww-overview .n-home{left:4%;top:92px}.ww-overview .n-ac{left:24%;top:38px}.ww-overview .n-tv{left:48%;top:112px}.ww-overview .n-heat{left:70%;top:35px}.ww-overview .n-plan{left:83%;top:118px}.ww-overview .n-target{right:2%;top:30px}
+.ww-overview .ww3d-orb{width:56px;height:56px;border-radius:50%}
+.ww-overview .p1{left:12%;top:120px;width:15%;transform:rotate(-15deg)}
+.ww-overview .p2{left:32%;top:105px;width:16%;transform:rotate(16deg)}
+.ww-overview .p3{left:55%;top:105px;width:16%;transform:rotate(-18deg)}
+.ww-overview .p4{left:77%;top:116px;width:9%;transform:rotate(18deg)}
+.ww-overview .p5{left:89%;top:93px;width:7%;transform:rotate(-28deg)}
+
+/* 3D house */
+.ww-house .house-3d{position:absolute;left:10%;top:35px;width:220px;height:170px;transform-style:preserve-3d;transform:rotateX(14deg) rotateY(-18deg);animation:wwFloat 5s ease-in-out infinite}
+@keyframes wwFloat{0%,100%{transform:rotateX(14deg) rotateY(-18deg) translateY(0)}50%{transform:rotateX(16deg) rotateY(-15deg) translateY(-8px)}}
+.house-front{position:absolute;inset:35px 15px 5px;background:linear-gradient(145deg,#14283b,#0b1827);border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px rgba(255,255,255,.05),20px 25px 45px -25px #000;transform:translateZ(28px)}
+.house-side{position:absolute;right:-10px;top:35px;width:45px;height:130px;background:#091522;border:1px solid rgba(255,255,255,.08);transform:skewY(-38deg) translateZ(0)}
+.house-roof{position:absolute;left:3px;top:0;width:220px;height:75px;background:linear-gradient(135deg,#1c3a4f,#0c1b2b);clip-path:polygon(50% 0,100% 65%,92% 100%,8% 100%,0 65%);border:1px solid rgba(56,189,248,.25);transform:translateZ(55px)}
+.house-door{position:absolute;left:90px;bottom:5px;width:38px;height:58px;background:#0a1624;border:1px solid rgba(34,197,94,.45);box-shadow:0 0 18px rgba(34,197,94,.15);transform:translateZ(34px)}
+.house-window{position:absolute;width:34px;height:28px;border:1px solid rgba(56,189,248,.55);background:rgba(56,189,248,.08);box-shadow:0 0 18px rgba(56,189,248,.18);transform:translateZ(34px)}
+.house-window.w1{left:28px;top:64px}.house-window.w2{right:28px;top:64px}
+.ww-house .energy-beam{position:absolute;left:41%;top:4px;width:4px;height:56px;background:linear-gradient(#fff,var(--electric),transparent);box-shadow:0 0 20px var(--electric);animation:wwBeam 1.5s infinite}
+@keyframes wwBeam{0%,100%{opacity:.35;transform:translateY(-5px)}50%{opacity:1;transform:translateY(12px)}}
+.ww-house .house-stats{position:absolute;right:8%;top:48px;width:42%;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ww-mini-stat{padding:13px;border-radius:16px;background:rgba(7,17,31,.62);border:1px solid rgba(148,163,184,.12);backdrop-filter:blur(10px)}
+.ww-mini-stat b{display:block;font:700 17px var(--font-mono);color:#fff}.ww-mini-stat span{font-size:10px;color:var(--muted)}
+
+/* appliance network */
+.ww-appliance .hub{position:absolute;left:50%;top:50%;width:110px;height:110px;transform:translate(-50%,-50%) translateZ(50px);border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,rgba(34,197,94,.18),rgba(13,27,42,.95) 65%);border:1px solid rgba(34,197,94,.55);box-shadow:0 0 55px rgba(34,197,94,.16),inset 0 0 30px rgba(34,197,94,.08);animation:wwCore 3s ease-in-out infinite}
+@keyframes wwCore{50%{box-shadow:0 0 80px rgba(34,197,94,.28),inset 0 0 45px rgba(34,197,94,.14);transform:translate(-50%,-50%) translateZ(65px) scale(1.03)}}
+.ww-appliance .hub strong{font:700 11px var(--font-mono);letter-spacing:.08em}.ww-appliance .hub small{font-size:10px;color:var(--muted);margin-top:3px}
+.ww-appliance .a1{left:8%;top:42px}.ww-appliance .a2{left:37%;top:8px}.ww-appliance .a3{right:7%;top:48px}.ww-appliance .a4{left:20%;bottom:12px}.ww-appliance .a5{right:24%;bottom:9px}
+.ww-appliance .a-line{position:absolute;left:50%;top:50%;height:2px;width:32%;background:linear-gradient(90deg,rgba(34,197,94,.05),var(--electric),rgba(56,189,248,.05));transform-origin:left center;box-shadow:0 0 14px rgba(34,197,94,.35);animation:wwFlow 2.4s infinite}
+.ww-appliance .l1{transform:rotate(198deg)}.ww-appliance .l2{transform:rotate(232deg)}.ww-appliance .l3{transform:rotate(-10deg)}.ww-appliance .l4{transform:rotate(150deg)}.ww-appliance .l5{transform:rotate(25deg)}
+
+/* dashboard energy core */
+.ww-dashboard .core{position:absolute;left:50%;top:52%;width:145px;height:145px;transform:translate(-50%,-50%) translateZ(40px);border-radius:50%;display:grid;place-items:center;text-align:center;background:radial-gradient(circle at 35% 30%,rgba(56,189,248,.22),rgba(34,197,94,.08) 32%,rgba(7,17,31,.95) 70%);border:1px solid rgba(255,255,255,.16);box-shadow:0 0 90px rgba(56,189,248,.14),inset 0 0 50px rgba(34,197,94,.1);animation:wwCore 4s ease-in-out infinite}
+.ww-dashboard .core b{font:700 27px var(--font-mono)}.ww-dashboard .core span{font-size:10px;color:var(--muted);display:block;margin-top:4px}
+.ww-dashboard .orbit{position:absolute;left:50%;top:52%;border:1px solid rgba(56,189,248,.16);border-radius:50%;transform:translate(-50%,-50%) rotateX(65deg);animation:wwOrbit 10s linear infinite}
+.ww-dashboard .o1{width:220px;height:100px}.ww-dashboard .o2{width:300px;height:135px;transform:translate(-50%,-50%) rotateX(65deg) rotateZ(55deg);animation-duration:15s}
+@keyframes wwOrbit{to{transform:translate(-50%,-50%) rotateX(65deg) rotateZ(360deg)}}
+.ww-dashboard .orbit-dot{position:absolute;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 0 18px 4px var(--electric-blue);top:50%;left:0;transform:translate(-50%,-50%)}
+.ww-dashboard .dash-stat{position:absolute;padding:12px 14px;border-radius:14px;background:rgba(7,17,31,.68);border:1px solid rgba(148,163,184,.12);backdrop-filter:blur(8px)}
+.ww-dashboard .ds1{left:5%;top:55px}.ww-dashboard .ds2{right:6%;top:30px}.ww-dashboard .ds3{left:12%;bottom:8px}.ww-dashboard .ds4{right:10%;bottom:20px}
+.ww-dashboard .dash-stat b{display:block;font:700 15px var(--font-mono)}.ww-dashboard .dash-stat span{font-size:9px;color:var(--muted)}
+
+/* optimizer engine */
+.ww-optimizer .engine{position:absolute;left:50%;top:52%;width:180px;height:120px;transform:translate(-50%,-50%) rotateX(14deg) rotateY(-12deg) translateZ(55px);transform-style:preserve-3d;animation:wwEngine 5s ease-in-out infinite}
+@keyframes wwEngine{50%{transform:translate(-50%,-50%) rotateX(17deg) rotateY(-7deg) translateZ(70px)}}
+.engine-face{position:absolute;inset:0;border-radius:22px;background:linear-gradient(145deg,#142c3e,#081522);border:1px solid rgba(34,197,94,.35);box-shadow:25px 35px 55px -30px #000,inset 0 1px rgba(255,255,255,.08),0 0 40px rgba(34,197,94,.08);display:grid;place-items:center}
+.engine-side{position:absolute;right:-22px;top:12px;width:22px;height:96px;background:#08131f;border:1px solid rgba(255,255,255,.08);transform:skewY(-45deg)}
+.engine-top{position:absolute;left:10px;top:-17px;width:160px;height:22px;background:#1a3b4e;border:1px solid rgba(56,189,248,.18);transform:skewX(-45deg)}
+.engine-core{width:58px;height:58px;border-radius:50%;border:1px solid rgba(34,197,94,.6);display:grid;place-items:center;box-shadow:0 0 35px rgba(34,197,94,.18);animation:wwPulse 1.8s infinite}
+@keyframes wwPulse{50%{box-shadow:0 0 55px rgba(34,197,94,.45);transform:scale(1.05)}}
+.engine-core svg{width:25px;color:var(--electric)}
+.ww-optimizer .engine-label{position:absolute;left:50%;top:76%;transform:translateX(-50%);font:700 11px var(--font-mono);color:var(--text-dim);white-space:nowrap}
+.ww-optimizer .engine-step{position:absolute;padding:9px 11px;border-radius:12px;background:rgba(7,17,31,.72);border:1px solid rgba(148,163,184,.12);font:600 9px var(--font-mono);color:var(--muted)}
+.ww-optimizer .es1{left:6%;top:28px}.ww-optimizer .es2{left:6%;bottom:22px}.ww-optimizer .es3{right:6%;top:30px}.ww-optimizer .es4{right:6%;bottom:22px}
+.ww-optimizer .engine-flow{position:absolute;height:2px;background:linear-gradient(90deg,transparent,var(--electric),transparent);box-shadow:0 0 14px var(--electric);animation:wwFlow 1.8s infinite}
+.ww-optimizer .ef1{left:21%;top:80px;width:26%;transform:rotate(12deg)}.ww-optimizer .ef2{left:53%;top:80px;width:26%;transform:rotate(-12deg)}
+
+/* What-if split reality */
+.ww-whatif .world-card{position:absolute;top:26px;width:37%;height:184px;border-radius:20px;background:rgba(7,17,31,.72);border:1px solid rgba(148,163,184,.14);padding:14px;transform-style:preserve-3d;box-shadow:0 25px 50px -35px #000}
+.ww-whatif .current-world{left:4%;transform:rotateY(8deg) translateZ(25px)}
+.ww-whatif .future-world{right:4%;transform:rotateY(-8deg) translateZ(25px);border-color:rgba(34,197,94,.3);box-shadow:0 25px 60px -35px rgba(34,197,94,.2)}
+.ww-whatif .world-card h4{font-size:12px;margin-bottom:10px}.ww-whatif .world-card .big{font:700 25px var(--font-mono)}
+.ww-whatif .world-card small{font-size:9px;color:var(--muted)}
+.ww-whatif .world-bar{height:9px;margin-top:15px;border-radius:99px;background:rgba(148,163,184,.09);overflow:hidden}.ww-whatif .world-bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--electric-blue),var(--electric));box-shadow:0 0 14px rgba(34,197,94,.35);transition:width .5s ease}
+.ww-whatif .reality-link{position:absolute;left:41%;right:41%;top:104px;text-align:center;font:700 9px var(--font-mono);color:var(--primary);z-index:3}.ww-whatif .reality-link::before{content:"";position:absolute;left:0;right:0;top:50%;height:2px;background:linear-gradient(90deg,transparent,var(--primary),transparent);box-shadow:0 0 15px rgba(34,197,94,.45);z-index:-1}.ww-whatif .reality-link span{background:#091523;padding:5px 8px;border-radius:99px;border:1px solid rgba(34,197,94,.2)}
+
+/* results portal */
+.ww-results .portal{position:absolute;left:50%;top:50%;width:180px;height:180px;transform:translate(-50%,-50%) rotateX(62deg) translateZ(40px);border-radius:50%;border:4px solid rgba(34,197,94,.55);box-shadow:0 0 0 18px rgba(34,197,94,.035),0 0 0 36px rgba(34,197,94,.02),0 0 80px rgba(34,197,94,.22);animation:wwPortal 4s ease-in-out infinite}
+@keyframes wwPortal{50%{transform:translate(-50%,-50%) rotateX(62deg) translateZ(55px) scale(1.04);box-shadow:0 0 0 24px rgba(34,197,94,.05),0 0 0 46px rgba(34,197,94,.025),0 0 110px rgba(34,197,94,.32)}}
+.ww-results .portal::before,.ww-results .portal::after{content:"";position:absolute;inset:22px;border:1px dashed rgba(56,189,248,.25);border-radius:50%;animation:wwPortalSpin 8s linear infinite}
+.ww-results .portal::after{inset:48px;border-color:rgba(250,204,21,.25);animation-direction:reverse;animation-duration:5s}
+@keyframes wwPortalSpin{to{transform:rotate(360deg)}}
+.ww-results .result-core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotateX(-62deg);text-align:center;width:150px}.ww-results .result-core b{font:700 28px var(--font-mono)}.ww-results .result-core span{display:block;font-size:10px;color:var(--muted);margin-top:5px}
+.ww-results .result-chip{position:absolute;padding:10px 13px;border-radius:13px;background:rgba(7,17,31,.76);border:1px solid rgba(148,163,184,.13);backdrop-filter:blur(9px)}
+.ww-results .rc1{left:7%;top:50px}.ww-results .rc2{right:8%;top:35px}.ww-results .rc3{left:12%;bottom:20px}.ww-results .rc4{right:10%;bottom:12px}.ww-results .result-chip b{font:700 13px var(--font-mono);display:block}.ww-results .result-chip span{font-size:9px;color:var(--muted)}
+
+@media(max-width:900px){
+  .ww3d-stage{min-height:350px;padding:16px}.ww3d-world{height:265px}
+  .ww-overview .n-home{left:1%}.ww-overview .n-ac{left:20%}.ww-overview .n-tv{left:43%}.ww-overview .n-heat{left:64%}.ww-overview .n-plan{left:76%}.ww-overview .n-target{right:0}
+  .ww-house .house-3d{left:50%;transform:translateX(-50%) scale(.82) rotateX(14deg) rotateY(-18deg)}
+  .ww-house .house-stats{left:4%;right:4%;top:auto;bottom:0;width:auto;grid-template-columns:repeat(4,1fr)}
+  .ww-whatif .world-card{width:42%}.ww-whatif .current-world{left:2%}.ww-whatif .future-world{right:2%}.ww-whatif .reality-link{left:40%;right:40%}
+}
+@media(max-width:620px){
+  .ww3d-stage{display:none}
+}
+
+</style>
+</head>
+<body>
+
+<div id="toast-region" aria-live="polite"></div>
+
+<div class="sidebar-scrim" id="sidebarScrim"></div>
+
+<div class="app-shell">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <nav class="sidebar" id="sidebar" aria-label="Primary">
+    <div class="brand">
+      <div class="brand-mark"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/></svg></div>
+      <div>
+        <div class="brand-name">WattWise</div>
+        <div class="brand-tag">Energy decision engine</div>
+      </div>
+    </div>
+    <ul class="nav-list" id="navList">
+      <li><button class="nav-item active" data-view="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Overview</button></li>
+      <li><button class="nav-item" data-view="household"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-6 9 6v11a1 1 0 01-1 1H4a1 1 0 01-1-1z"/></svg>Household</button></li>
+      <li><button class="nav-item" data-view="appliances"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Appliances</button></li>
+      <li><button class="nav-item" data-view="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M7 15l4-5 3 3 5-7"/></svg>Dashboard</button></li>
+      <li><button class="nav-item" data-view="optimizer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.7" fill="currentColor"/></svg>Optimizer</button></li>
+      <li><button class="nav-item" data-view="whatif"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2l4 4-4 4M21 6H8a4 4 0 00-4 4M7 22l-4-4 4-4M3 18h13a4 4 0 004-4"/></svg>What-If</button></li>
+      <li><button class="nav-item" data-view="results"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6M9 9h1"/></svg>Results</button></li>
+    </ul>
+    <div class="sidebar-footer">
+      <span class="pulse-dot"></span> System Online · Local simulation
+    </div>
+  </nav>
+
+  <div class="main-wrap">
+    <!-- ===================== MOBILE TOPBAR ===================== -->
+    <div class="topbar">
+      <button class="hamburger" id="hamburgerBtn" aria-label="Open menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      <div class="brand" style="padding:0;"><div class="brand-mark" style="width:28px;height:28px;"><svg viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/></svg></div><span class="brand-name" style="font-size:15px;">WattWise</span></div>
+      <button class="btn btn-primary btn-sm" id="loadDemoBtnMobile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/></svg>Demo</button>
+    </div>
+
+    <!-- ===================== DESKTOP TOPSTRIP ===================== -->
+    <div class="topstrip">
+      <div class="status-chip"><span class="pulse-dot"></span> System Online</div>
+      <button class="btn btn-secondary btn-sm" id="loadDemoBtnTop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/></svg>Load Demo</button>
+    </div>
+
+    <main class="main">
+
+      <!-- ===================== OVERVIEW / LANDING ===================== -->
+      <section class="view active" id="view-overview">
+        <div class="hero">
+          <div class="hero-grid">
+            <div>
+              <div class="hero-eyebrow"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/></svg>Household energy decision-support</div>
+              <h1>Make every unit of<br><span class="accent">electricity count.</span></h1>
+              <p class="hero-sub">Understand your household energy usage, protect essential appliances, and discover practical ways to reach your monthly energy or cost target.</p>
+              <div class="hero-actions">
+                <button class="btn btn-primary" id="startOptimizingBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 5l7 7-7 7"/></svg>Start Optimizing</button>
+                <button class="btn btn-secondary" id="loadDemoBtnHero"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/></svg>Load Demo Household</button>
+              </div>
+              <div class="value-line"><strong>WattWise</strong> doesn't just show where electricity goes. It helps you decide what can change. Protect essential usage. Optimize flexible usage. Stay closer to your target.</div>
+            </div>
+
+            <div class="flow-visual">
+              <svg class="flow-svg" viewBox="0 0 380 380" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#22C55E" stop-opacity="0.9"/>
+                    <stop offset="100%" stop-color="#22C55E" stop-opacity="0.15"/>
+                  </linearGradient>
+                </defs>
+                <!-- home node -->
+                <g style="animation: floaty 4s ease-in-out infinite;">
+                  <circle cx="190" cy="50" r="30" fill="#0D1B2A" stroke="#22C55E" stroke-width="1.5"/>
+                  <path d="M178 55v-12l12-9 12 9v12h-8v-8h-8v8z" fill="#22C55E"/>
+                </g>
+                <text x="190" y="94" class="flow-node-label">HOUSEHOLD</text>
+
+                <!-- lines to three appliances -->
+                <path d="M190 80 C190 120, 90 110, 90 150" fill="none" stroke="url(#lineGrad)" stroke-width="1.5" stroke-dasharray="5 6" class="flow-particle"/>
+                <path d="M190 80 L190 150" fill="none" stroke="url(#lineGrad)" stroke-width="1.5" stroke-dasharray="5 6" class="flow-particle"/>
+                <path d="M190 80 C190 120, 290 110, 290 150" fill="none" stroke="url(#lineGrad)" stroke-width="1.5" stroke-dasharray="5 6" class="flow-particle"/>
+
+                <g>
+                  <rect x="58" y="150" width="64" height="46" rx="11" fill="#0D1B2A" stroke="#38BDF8" stroke-width="1.3"/>
+                  <text x="90" y="178" text-anchor="middle" font-size="10" fill="#38BDF8" font-family="IBM Plex Mono">AC</text>
+                </g>
+                <g>
+                  <rect x="158" y="150" width="64" height="46" rx="11" fill="#0D1B2A" stroke="#F59E0B" stroke-width="1.3"/>
+                  <text x="190" y="178" text-anchor="middle" font-size="9.5" fill="#F59E0B" font-family="IBM Plex Mono">HEATER</text>
+                </g>
+                <g>
+                  <rect x="258" y="150" width="64" height="46" rx="11" fill="#0D1B2A" stroke="#94A3B8" stroke-width="1.3"/>
+                  <text x="290" y="178" text-anchor="middle" font-size="10" fill="#94A3B8" font-family="IBM Plex Mono">TV</text>
+                </g>
+
+                <!-- converge to plan -->
+                <path d="M90 196 C90 230, 190 220, 190 250" fill="none" stroke="url(#lineGrad)" stroke-width="1.5" stroke-dasharray="4 6" class="flow-particle"/>
+                <path d="M190 196 L190 250" fill="none" stroke="url(#lineGrad)" stroke-width="1.5" stroke-dasharray="4 6" class="flow-particle"/>
+                <path d="M290 196 C290 230, 190 220, 190 250" fill="none" stroke="url(#lineGrad)" stroke-width="1.5" stroke-dasharray="4 6" class="flow-particle"/>
+
+                <rect x="120" y="250" width="140" height="42" rx="12" fill="rgba(34,197,94,0.1)" stroke="#22C55E" stroke-width="1.4"/>
+                <text x="190" y="276" text-anchor="middle" font-size="11" fill="#22C55E" font-family="IBM Plex Mono" font-weight="700">ENERGY PLAN</text>
+
+                <path d="M190 292 L190 320" fill="none" stroke="#22C55E" stroke-width="1.5" stroke-dasharray="4 6" class="flow-particle"/>
+                <g style="animation: floaty 3.4s ease-in-out infinite .3s;">
+                  <circle cx="190" cy="345" r="26" fill="#22C55E" opacity="0.15" stroke="#22C55E" stroke-width="1.4"/>
+                  <text x="190" y="350" text-anchor="middle" font-size="13" fill="#22C55E">🎯</text>
+                </g>
+                <text x="190" y="378" class="flow-node-label" fill="#22C55E">TARGET</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="preview-strip">
+            <div class="grid grid-3">
+              <div class="card feature-card hoverable">
+                <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M7 15l4-5 3 3 5-7"/></svg></div>
+                <h3>Understand</h3>
+                <p>See exactly where your estimated energy is going, appliance by appliance.</p>
+              </div>
+              <div class="card feature-card hoverable">
+                <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg></div>
+                <h3>Optimize</h3>
+                <p>Find flexible usage that can potentially be reduced or shifted, without touching essentials.</p>
+              </div>
+              <div class="card feature-card hoverable">
+                <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2l4 4-4 4M21 6H8a4 4 0 00-4 4M7 22l-4-4 4-4M3 18h13a4 4 0 004-4"/></svg></div>
+                <h3>Simulate</h3>
+                <p>Test alternative usage patterns before you actually change your routine.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== HOUSEHOLD ===================== -->
+      <section class="view" id="view-household">
+        <div class="page-head">
+          <div>
+            <div class="eyebrow">Step 1</div>
+            <h1>Your Household</h1>
+            <p class="page-sub">Start with a few details. WattWise handles the analysis.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-2" style="align-items:start;">
+          <div class="card">
+            <h3 style="font-size:15px; margin-bottom:18px;">Household details</h3>
+            <div class="grid" style="grid-template-columns:1fr 1fr;">
+              <div class="field">
+                <label for="hh-people">Number of people</label>
+                <input class="input" type="number" id="hh-people" min="1" placeholder="e.g. 4">
+                <span class="field-error" id="err-hh-people"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>Enter a value greater than 0.</span>
+              </div>
+              <div class="field">
+                <label for="hh-tariff">Electricity tariff</label>
+                <div class="input-group"><span class="input-prefix">₹</span><input class="input" type="number" id="hh-tariff" min="0" step="0.1" placeholder="8.0"><span class="input-suffix">/ kWh</span></div>
+                <span class="field-error" id="err-hh-tariff"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>Enter a tariff greater than 0.</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>How would you like to describe your usage? (optional)</label>
+              <div class="segmented" id="hhInputMode">
+                <button class="active" data-mode="none">Skip</button>
+                <button data-mode="kwh">Monthly kWh</button>
+                <button data-mode="bill">Monthly bill</button>
+              </div>
+            </div>
+            <div class="field" id="hh-kwh-field" style="display:none;">
+              <label for="hh-kwh">Monthly consumption</label>
+              <div class="input-group"><input class="input" type="number" id="hh-kwh" min="0" placeholder="e.g. 350" style="padding-left:13px;"><span class="input-suffix">kWh</span></div>
+            </div>
+            <div class="field" id="hh-bill-field" style="display:none;">
+              <label for="hh-bill">Monthly electricity bill</label>
+              <div class="input-group"><span class="input-prefix">₹</span><input class="input" type="number" id="hh-bill" min="0" placeholder="e.g. 2800"></div>
+            </div>
+
+            <div style="height:8px;"></div>
+            <h3 style="font-size:13.5px; color:var(--text-dim); margin-bottom:14px;">Optional targets</h3>
+            <div class="grid" style="grid-template-columns:1fr 1fr;">
+              <div class="field">
+                <label for="hh-target-energy">Monthly energy target</label>
+                <div class="input-group"><input class="input" type="number" id="hh-target-energy" min="0" placeholder="e.g. 300" style="padding-left:13px;"><span class="input-suffix">kWh</span></div>
+              </div>
+              <div class="field">
+                <label for="hh-target-cost">Monthly cost target</label>
+                <div class="input-group"><span class="input-prefix">₹</span><input class="input" type="number" id="hh-target-cost" min="0" placeholder="e.g. 2400"></div>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-block" id="saveHouseholdBtn" style="margin-top:6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Save & Continue to Appliances</button>
+          </div>
+
+          <div class="card" style="background:linear-gradient(180deg, rgba(34,197,94,0.06), var(--card));">
+            <h3 style="font-size:15px; margin-bottom:10px;">Why we ask this</h3>
+            <p style="font-size:13px; color:var(--text-dim); line-height:1.7;">
+              Your household size and tariff let WattWise convert appliance usage into realistic monthly energy and cost estimates.
+              Targets are optional — set one now, or set it later from the Optimizer once you've added appliances.
+            </p>
+            <div style="height:16px;"></div>
+            <div class="card-flat">
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                <div class="feature-icon" style="margin:0; width:30px; height:30px;"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/></svg></div>
+                <b style="font-size:13px;">In a hurry?</b>
+              </div>
+              <p style="font-size:12.5px; color:var(--muted); margin-bottom:12px;">Load a realistic demo household and skip straight to the dashboard.</p>
+              <button class="btn btn-secondary btn-sm btn-block" id="loadDemoBtnHousehold">Load Demo Household</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== APPLIANCES ===================== -->
+      <section class="view" id="view-appliances">
+        <div class="page-head">
+          <div>
+            <div class="eyebrow">Step 2</div>
+            <h1>Your Appliances</h1>
+            <p class="page-sub">Add the appliances that shape your household's energy usage.</p>
+          </div>
+          <button class="btn btn-primary" id="addApplianceBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Add Appliance</button>
+        </div>
+
+        <div id="appliancesEmpty" class="card empty-state" style="display:none;">
+          <div class="ic"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></div>
+          <h3>No appliances yet</h3>
+          <p>Add your household appliances to begin analyzing your energy usage.</p>
+          <button class="btn btn-primary" id="addApplianceBtnEmpty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Add Appliance</button>
+        </div>
+
+        <div class="grid grid-3" id="applianceGrid"></div>
+      </section>
+
+      <!-- ===================== DASHBOARD ===================== -->
+      <section class="view" id="view-dashboard">
+        <div class="page-head">
+          <div>
+            <div class="eyebrow">Analysis</div>
+            <h1>Energy Overview</h1>
+            <p class="page-sub">Here's where your household's estimated electricity is going.</p>
+          </div>
+        </div>
+
+        <div id="dashboardEmpty" class="card empty-state" style="display:none;">
+          <div class="ic"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M7 15l4-5 3 3 5-7"/></svg></div>
+          <h3>Nothing to analyze yet</h3>
+          <p>Add a household and at least one appliance, or load the demo household, to see your energy overview.</p>
+          <button class="btn btn-primary" id="loadDemoBtnDash">Load Demo Household</button>
+        </div>
+
+        <div id="dashboardContent" style="display:none;">
+          <div class="grid grid-4">
+            <div class="card kpi hoverable">
+              <div class="kpi-top"><span class="kpi-label">Estimated Energy</span><div class="kpi-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/></svg></div></div>
+              <div class="kpi-value num" id="kpiEnergy">0<span class="unit">kWh / mo</span></div>
+              <div class="kpi-foot">Across all appliances</div>
+            </div>
+            <div class="card kpi hoverable">
+              <div class="kpi-top"><span class="kpi-label">Estimated Cost</span><div class="kpi-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div></div>
+              <div class="kpi-value num" id="kpiCost">₹0<span class="unit">/ mo</span></div>
+              <div class="kpi-foot" id="kpiCostFoot">At current tariff</div>
+            </div>
+            <div class="card kpi hoverable">
+              <div class="kpi-top"><span class="kpi-label">Appliances</span><div class="kpi-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></div></div>
+              <div class="kpi-value num" id="kpiApplianceCount">0</div>
+              <div class="kpi-foot" id="kpiApplianceFoot">tracked in this household</div>
+            </div>
+            <div class="card kpi hoverable">
+              <div class="kpi-top"><span class="kpi-label">Highest Consumption</span><div class="kpi-icon red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/></svg></div></div>
+              <div class="kpi-value" id="kpiHighest" style="font-size:19px;">—</div>
+              <div class="kpi-foot num" id="kpiHighestKwh">0 kWh</div>
+            </div>
+          </div>
+
+          <div class="grid grid-3" style="margin-top:16px;">
+            <div class="card">
+              <div class="kpi-label" style="margin-bottom:8px;">Essential Consumption</div>
+              <div class="kpi-value num" id="kpiEssential" style="font-size:24px;">0<span class="unit">kWh</span></div>
+              <div class="badge badge-essential" style="margin-top:10px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 118 0v4"/></svg>Protected</div>
+            </div>
+            <div class="card">
+              <div class="kpi-label" style="margin-bottom:8px;">Flexible Consumption</div>
+              <div class="kpi-value num" id="kpiFlexible" style="font-size:24px;">0<span class="unit">kWh</span></div>
+              <div class="badge badge-flexible" style="margin-top:10px;">Adjustable</div>
+            </div>
+            <div class="card">
+              <div class="kpi-label" style="margin-bottom:8px;">Potential Saving Opportunity</div>
+              <div class="kpi-value num" id="kpiSavingOpp" style="font-size:24px; color:var(--primary);">0<span class="unit">kWh</span></div>
+              <div class="kpi-foot">Based on flexible usage, before optimization</div>
+            </div>
+          </div>
+
+          <div class="grid grid-2" style="margin-top:16px;">
+            <div class="card chart-card">
+              <h3>Appliance Consumption</h3>
+              <div class="sub">Estimated monthly kWh by appliance</div>
+              <div class="chart-wrap"><canvas id="chartConsumption"></canvas></div>
+            </div>
+            <div class="card chart-card">
+              <h3>Estimated Cost Contribution</h3>
+              <div class="sub">Monthly cost share by appliance</div>
+              <div class="chart-wrap"><canvas id="chartCost"></canvas></div>
+            </div>
+          </div>
+
+          <div class="grid grid-2" style="margin-top:16px; align-items:start;">
+            <div class="card chart-card">
+              <h3>Essential vs Flexible</h3>
+              <div class="sub">Share of estimated monthly energy</div>
+              <div class="chart-wrap donut"><canvas id="chartEssentialFlexible"></canvas></div>
+            </div>
+            <div>
+              <h3 style="font-size:15px; margin-bottom:14px;">What stands out?</h3>
+              <div id="insightsList" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== OPTIMIZER ===================== -->
+      <section class="view" id="view-optimizer">
+        <div class="page-head">
+          <div>
+            <div class="eyebrow">🎯 Hero feature</div>
+            <h1>Energy Optimizer</h1>
+            <p class="page-sub">Set a target. WattWise finds practical changes while protecting essential usage.</p>
+          </div>
+        </div>
+
+        <div id="optimizerEmpty" class="card empty-state" style="display:none;">
+          <div class="ic"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg></div>
+          <h3>Add appliances first</h3>
+          <p>The optimizer needs your household's appliance data before it can suggest a plan.</p>
+          <button class="btn btn-primary" id="loadDemoBtnOpt">Load Demo Household</button>
+        </div>
+
+        <div id="optimizerContent" style="display:none;">
+          <div class="grid grid-2" style="align-items:start;">
+            <div class="card">
+              <div class="kpi-label">Current Estimate</div>
+              <div style="display:flex; gap:26px; margin-top:10px;">
+                <div>
+                  <div class="kpi-value num" id="optCurrentKwh" style="font-size:26px;">0<span class="unit">kWh</span></div>
+                </div>
+                <div>
+                  <div class="kpi-value num" id="optCurrentCost" style="font-size:26px;">₹0<span class="unit">/mo</span></div>
+                </div>
+              </div>
+
+              <div style="height:22px;"></div>
+              <div class="kpi-label" style="margin-bottom:10px;">Optimization target</div>
+              <div class="segmented" id="targetTypeToggle">
+                <button class="active" data-target="energy">Energy (kWh)</button>
+                <button data-target="cost">Cost (₹)</button>
+              </div>
+              <div class="field" style="margin-top:16px;">
+                <label for="optTargetInput" id="optTargetLabel">Target energy</label>
+                <div class="input-group">
+                  <span class="input-prefix" id="optTargetPrefix" style="display:none;">₹</span>
+                  <input class="input" type="number" id="optTargetInput" min="1" style="padding-left:13px;">
+                  <span class="input-suffix" id="optTargetSuffix">kWh</span>
+                </div>
+              </div>
+
+              <div class="progress-labels">
+                <span>Current: <b class="num" id="progCurrentLabel">0</b></span>
+                <span>Target: <b class="num" id="progTargetLabel">0</b></span>
+              </div>
+              <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%;"></div></div>
+              <div class="help-note" id="reductionNeededNote"></div>
+
+              <div class="optimize-cta-wrap">
+                <button class="btn btn-primary optimize-cta" id="findPlanBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/></svg>Find Better Plan</button>
+              </div>
+              <div class="loading-lines" id="optLoadingLines" style="display:none;">
+                <div class="spinner"></div>
+                <div class="loading-line" data-step="0">Analyzing household usage...</div>
+                <div class="loading-line" data-step="1">Protecting essential loads...</div>
+                <div class="loading-line" data-step="2">Evaluating flexible usage...</div>
+                <div class="loading-line" data-step="3">Building optimized plan...</div>
+              </div>
+            </div>
+
+            <div>
+              <div class="card" style="margin-bottom:16px;">
+                <h3 style="font-size:14.5px; margin-bottom:4px;">Protected Essential Usage</h3>
+                <p style="font-size:12px; color:var(--muted); margin-bottom:10px;">These appliances are protected from automatic reduction by the optimization engine.</p>
+                <div id="protectedList"></div>
+              </div>
+              <div class="card">
+                <h3 style="font-size:14.5px; margin-bottom:4px;">Adjustable Usage</h3>
+                <p style="font-size:12px; color:var(--muted); margin-bottom:10px;">Flexible appliances the optimizer may adjust to help reach your target.</p>
+                <div id="flexibleList"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Results -->
+          <div id="optimizeResults" style="display:none; margin-top:26px;">
+            <div class="section-flex">
+              <h2 style="font-size:19px;">Optimization Results</h2>
+              <span class="badge badge-demo no-print" id="localSimBadge" style="display:none;">Local simulation</span>
+            </div>
+
+            <div id="feasibilityBanner"></div>
+
+            <div class="compare-wrap">
+              <div class="card compare-card current">
+                <div class="tag">Current Plan</div>
+                <div class="big num" id="cmpCurrentKwh">0 kWh</div>
+                <div class="cost num" id="cmpCurrentCost">₹0</div>
+              </div>
+              <div class="compare-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 5l7 7-7 7"/></svg></div>
+              <div class="card compare-card optimized">
+                <div class="tag">Optimized Simulation</div>
+                <div class="big num" id="cmpOptKwh">0 kWh</div>
+                <div class="cost num" id="cmpOptCost">₹0</div>
+              </div>
+            </div>
+
+            <div class="savings-summary">
+              <div class="label">Your Potential Improvement</div>
+              <div class="figures">
+                <div><div class="figure-num num" id="savingKwh">↓ 0 kWh</div><div class="figure-unit">energy / month</div></div>
+                <div><div class="figure-num num" id="savingCost">↓ ₹0</div><div class="figure-unit">estimated cost / month</div></div>
+              </div>
+              <div class="note">Based on simulated changes to flexible appliances. Not a guaranteed outcome.</div>
+            </div>
+
+            <h3 style="font-size:15px; margin: 28px 0 14px;">Recommended Changes</h3>
+            <div id="recommendationsList" style="display:flex; flex-direction:column; gap:12px;"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== WHAT-IF ===================== -->
+      <section class="view" id="view-whatif">
+        <div class="page-head">
+          <div>
+            <div class="eyebrow">Simulator</div>
+            <h1>What If?</h1>
+            <p class="page-sub">Test a different usage pattern before changing your routine.</p>
+          </div>
+        </div>
+
+        <div id="whatifEmpty" class="card empty-state" style="display:none;">
+          <div class="ic"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2l4 4-4 4M21 6H8a4 4 0 00-4 4M7 22l-4-4 4-4M3 18h13a4 4 0 004-4"/></svg></div>
+          <h3>No appliances to simulate</h3>
+          <p>Add appliances or load the demo household to try the what-if simulator.</p>
+          <button class="btn btn-primary" id="loadDemoBtnWhatif">Load Demo Household</button>
+        </div>
+
+        <div id="whatifContent" class="whatif-panel" style="display:none;">
+          <div class="card">
+            <div class="field">
+              <label for="wiApplianceSelect">Select appliance</label>
+              <select class="input" id="wiApplianceSelect"></select>
+            </div>
+
+            <div class="slider-row">
+              <div class="slider-label"><span>Hours / day</span><b class="num" id="wiHoursVal">0</b></div>
+              <input type="range" id="wiHoursSlider" min="0" max="24" step="0.5">
+            </div>
+            <div class="slider-row">
+              <div class="slider-label"><span>Days / month</span><b class="num" id="wiDaysVal">0</b></div>
+              <input type="range" id="wiDaysSlider" min="0" max="31" step="1">
+            </div>
+
+            <button class="btn btn-ghost btn-block" id="wiResetBtn" style="border:1px solid var(--border-strong);"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>Reset Scenario</button>
+          </div>
+
+          <div>
+            <div class="wi-compare">
+              <div class="card wi-box">
+                <div class="lab">Current</div>
+                <div class="v num" id="wiCurrentKwh">0 kWh</div>
+                <div class="c num" id="wiCurrentCost">₹0</div>
+              </div>
+              <div class="card wi-box">
+                <div class="lab" style="color:var(--primary);">New Scenario</div>
+                <div class="v num" id="wiNewKwh" style="color:var(--primary);">0 kWh</div>
+                <div class="c num" id="wiNewCost">₹0</div>
+              </div>
+            </div>
+            <div class="wi-diff">
+              <div class="d1 num" id="wiDiffKwh">0 kWh</div>
+              <div class="d2 num" id="wiDiffDetail">₹0 · 0%</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== RESULTS / REPORT ===================== -->
+      <section class="view" id="view-results">
+        <div class="page-head">
+          <div>
+            <div class="eyebrow">Summary</div>
+            <h1>Your WattWise Plan</h1>
+            <p class="page-sub">A complete snapshot of your household's estimated usage and optimization plan.</p>
+          </div>
+          <button class="btn btn-secondary no-print" id="printReportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>Print Report</button>
+        </div>
+
+        <div id="resultsEmpty" class="card empty-state" style="display:none;">
+          <div class="ic"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></div>
+          <h3>Your plan will appear here</h3>
+          <p>Add a household and appliances, then run the optimizer to generate your WattWise report.</p>
+          <button class="btn btn-primary" id="loadDemoBtnResults">Load Demo Household</button>
+        </div>
+
+        <div id="resultsContent" style="display:none;">
+          <div class="grid grid-3">
+            <div class="card">
+              <h3 style="font-size:14px; margin-bottom:12px;">Household</h3>
+              <div style="display:flex; flex-direction:column; gap:8px; font-size:13px; color:var(--text-dim);">
+                <div><span class="num" id="repPeople">0</span> people</div>
+                <div><span class="num" id="repApplianceCount">0</span> appliances</div>
+                <div>₹<span class="num" id="repTariff">0</span> / kWh</div>
+              </div>
+            </div>
+            <div class="card">
+              <h3 style="font-size:14px; margin-bottom:12px;">Current</h3>
+              <div class="kpi-value num" id="repCurrentKwh" style="font-size:22px;">0 kWh</div>
+              <div class="kpi-foot num" id="repCurrentCost">₹0 / mo</div>
+            </div>
+            <div class="card" style="border-color:var(--primary-dim);">
+              <h3 style="font-size:14px; margin-bottom:12px;">Optimized Simulation</h3>
+              <div class="kpi-value num" id="repOptKwh" style="font-size:22px; color:var(--primary);">0 kWh</div>
+              <div class="kpi-foot num" id="repOptCost">₹0 / mo</div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:16px;">
+            <div class="section-flex" style="margin-bottom:0;">
+              <div>
+                <div class="kpi-label">Potential Difference</div>
+                <div style="display:flex; gap:24px; margin-top:6px;">
+                  <div class="kpi-value num" id="repDiffKwh" style="font-size:22px; color:var(--primary);">0 kWh</div>
+                  <div class="kpi-value num" id="repDiffCost" style="font-size:22px; color:var(--primary);">₹0</div>
+                </div>
+              </div>
+              <div id="repTargetStatus"></div>
+            </div>
+          </div>
+
+          <div class="report-section" style="margin-top:26px;">
+            <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/></svg>Recommended Changes</h3>
+            <ul class="report-list" id="repRecommendations"></ul>
+          </div>
+
+          <div class="report-section">
+            <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 118 0v4"/></svg>Protected Usage</h3>
+            <ul class="report-list" id="repProtected"></ul>
+          </div>
+
+          <div class="report-section">
+            <h3>About these estimates</h3>
+            <div class="card-flat assumptions">
+              <p>Energy values are calculated from appliance power ratings, quantity and reported usage patterns.</p>
+              <p>Cost estimates use the selected electricity tariff.</p>
+              <p>Potential savings are simulations, not measured real-world savings.</p>
+              <p>Actual electricity bills may differ because of tariff slabs, fixed charges, taxes, appliance efficiency and real-world usage.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ===================== APPLIANCE FORM MODAL ===================== -->
+<div class="modal-backdrop" id="applianceModalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="applianceModalTitle">
+    <div class="modal-head">
+      <h3 id="applianceModalTitle">Add Appliance</h3>
+      <button class="modal-close" id="closeApplianceModal" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="af-name">Appliance name</label>
+        <input class="input" id="af-name" placeholder="e.g. Water Heater">
+        <span class="field-error" id="err-af-name">Give this appliance a name.</span>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;">
+        <div class="field">
+          <label for="af-type">Appliance type</label>
+          <select class="input" id="af-type">
+            <option>Fan</option><option>Refrigerator</option><option>AC</option><option>TV</option>
+            <option>Washing Machine</option><option>Water Heater</option><option>Water Pump</option>
+            <option>Microwave</option><option>Computer</option><option>Lights</option><option>Iron</option><option>Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="af-watts">Power rating (W)</label>
+          <input class="input" type="number" id="af-watts" min="1" placeholder="1500">
+          <span class="field-error" id="err-af-watts">Enter a value greater than 0.</span>
+        </div>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;">
+        <div class="field">
+          <label for="af-qty">Quantity</label>
+          <input class="input" type="number" id="af-qty" min="1" value="1">
+          <span class="field-error" id="err-af-qty">Enter a value greater than 0.</span>
+        </div>
+        <div class="field">
+          <label for="af-hours">Hours per day</label>
+          <input class="input" type="number" id="af-hours" min="0" max="24" step="0.5" placeholder="2">
+          <span class="field-error" id="err-af-hours">Must be greater than 0 and up to 24.</span>
+        </div>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;">
+        <div class="field">
+          <label for="af-days">Days per month</label>
+          <input class="input" type="number" id="af-days" min="0" max="31" step="1" placeholder="30">
+          <span class="field-error" id="err-af-days">Must be greater than 0 and up to 31.</span>
+        </div>
+        <div class="field">
+          <label for="af-period">Preferred usage period</label>
+          <select class="input" id="af-period">
+            <option value="">Any time</option>
+            <option>Morning</option><option>Afternoon</option><option>Evening</option><option>Night</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Classification</label>
+        <div class="toggle-pair" id="af-essential-toggle">
+          <button type="button" class="active essential" data-val="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 118 0v4"/></svg>Essential</button>
+          <button type="button" class="flexible" data-val="false">Flexible</button>
+        </div>
+        <span class="hint" style="margin-top:6px;">Essential appliances are protected from optimization reductions.</span>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="cancelApplianceBtn">Cancel</button>
+      <button class="btn btn-primary" id="saveApplianceBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Save Appliance</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== CALCULATION MODAL ===================== -->
+<div class="modal-backdrop" id="calcModalBackdrop">
+  <div class="modal" style="max-width:460px;" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3 id="calcModalTitle">Appliance</h3>
+      <button class="modal-close" id="closeCalcModal" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="kpi-label" style="margin-bottom:8px;">Estimated monthly energy</div>
+      <div class="formula-block" id="calcEnergyFormula"></div>
+      <div style="height:16px;"></div>
+      <div class="kpi-label" style="margin-bottom:8px;">Estimated cost</div>
+      <div class="formula-block" id="calcCostFormula"></div>
+      <p style="font-size:11.5px; color:var(--faint); margin-top:16px;">Based on the appliance rating and usage information provided.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   WATTWISE — APPLICATION LOGIC
+   ============================================================ */
+(function(){
+"use strict";
+
+/* ---------- 1. API CONFIGURATION ---------- */
+const API_BASE_URL = "http://localhost:8000"; // replace with https://YOUR-WATTWISE-BACKEND.onrender.com
+const API_TIMEOUT_MS = 2500;
+
+async function apiRequest(endpoint, options = {}){
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try{
+    const res = await fetch(API_BASE_URL + endpoint, {
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      ...options
+    });
+    clearTimeout(timeout);
+    if(!res.ok) throw new Error("Backend responded with " + res.status);
+    return await res.json();
+  }catch(err){
+    clearTimeout(timeout);
+    throw err;
+  }
+}
+
+const Api = {
+  getDemoHousehold: () => apiRequest("/api/demo"),
+  createHousehold: (payload) => apiRequest("/api/households", { method:"POST", body: JSON.stringify(payload) }),
+  getAppliances: (id) => apiRequest(`/api/households/${id}/appliances`),
+  saveAppliance: (id, payload) => apiRequest(`/api/households/${id}/appliances`, { method:"POST", body: JSON.stringify(payload) }),
+  updateAppliance: (id, payload) => apiRequest(`/api/appliances/${id}`, { method:"PUT", body: JSON.stringify(payload) }),
+  deleteAppliance: (id) => apiRequest(`/api/appliances/${id}`, { method:"DELETE" }),
+  analyzeHousehold: (payload) => apiRequest("/api/analyze", { method:"POST", body: JSON.stringify(payload) }),
+  optimizeHousehold: (payload) => apiRequest("/api/optimize", { method:"POST", body: JSON.stringify(payload) }),
+  runWhatIf: (payload) => apiRequest("/api/what-if", { method:"POST", body: JSON.stringify(payload) })
+};
+
+/* ---------- 2. APPLICATION STATE ---------- */
+const appState = {
+  household: null,       // { people, tariff, targetType, targetEnergy, targetCost }
+  appliances: [],         // [{ id, name, type, watts, qty, hoursPerDay, daysPerMonth, essential, period }]
+  analysis: null,
+  optimization: null,
+  whatIf: null,
+  dataSource: null        // 'backend' | 'local'
+};
+
+let idCounter = 1;
+function nextId(){ return "app-" + (idCounter++); }
+
+/* ---------- 3. LOCAL CALCULATION ENGINE (demo / offline fallback) ---------- */
+function applianceKwh(a){
+  return (a.watts * a.qty * a.hoursPerDay * a.daysPerMonth) / 1000;
+}
+function applianceCost(a, tariff){
+  return applianceKwh(a) * tariff;
+}
+
+function localAnalyze(household, appliances){
+  const tariff = household.tariff;
+  const rows = appliances.map(a => ({ ...a, kwh: applianceKwh(a), cost: applianceKwh(a) * tariff }));
+  const totalKwh = rows.reduce((s,a) => s + a.kwh, 0);
+  const totalCost = rows.reduce((s,a) => s + a.cost, 0);
+  const essentialKwh = rows.filter(a=>a.essential).reduce((s,a)=>s+a.kwh,0);
+  const flexibleKwh = rows.filter(a=>!a.essential).reduce((s,a)=>s+a.kwh,0);
+  const highest = rows.slice().sort((a,b)=>b.kwh-a.kwh)[0] || null;
+  const topFlexible = rows.filter(a=>!a.essential).sort((a,b)=>b.kwh-a.kwh)[0] || null;
+  const topEssential = rows.filter(a=>a.essential).sort((a,b)=>b.kwh-a.kwh)[0] || null;
+
+  const insights = [];
+  if(highest){
+    insights.push({
+      kind: highest.essential ? "essential" : "high",
+      title: highest.essential ? "High consumption, protected" : "High consumption",
+      text: `Your ${highest.name} is currently one of the highest estimated energy consumers at ${round1(highest.kwh)} kWh/month${highest.essential ? ", and is protected because it's marked essential." : "."}`
+    });
+  }
+  if(topFlexible && (!highest || topFlexible.id !== highest.id)){
+    insights.push({
+      kind: "flexible",
+      title: "Flexible opportunity",
+      text: `Your ${topFlexible.name} contributes ${round1(topFlexible.kwh)} kWh/month to estimated consumption and is marked as flexible, making it a candidate for optimization.`
+    });
+  }
+  if(topEssential){
+    insights.push({
+      kind: "essential",
+      title: "Essential protection",
+      text: `${topEssential.name} usage is protected because it is marked essential — the optimizer will not reduce it automatically.`
+    });
+  }
+  if(flexibleKwh > 0){
+    insights.push({
+      kind: "opportunity",
+      title: "Potential saving opportunity",
+      text: `Flexible appliances account for ${round1(flexibleKwh)} kWh/month (${Math.round(flexibleKwh/Math.max(totalKwh,1)*100)}% of total). This is the pool the optimizer can work with.`
+    });
+  }
+
+  return { rows, totalKwh, totalCost, essentialKwh, flexibleKwh, highest, insights, savingOpportunity: flexibleKwh * 0.3 };
+}
+
+const REDUCTION_CAP = 0.5; // max 50% reduction per flexible appliance
+const MIN_HOURS_STEP = 0.5;
+const MIN_DAYS_STEP = 1;
+
+function localOptimize(household, appliances, targetType, targetValue){
+  const tariff = household.tariff;
+  const analysis = localAnalyze(household, appliances);
+  const currentKwh = analysis.totalKwh;
+  const currentCost = analysis.totalCost;
+
+  const targetKwh = targetType === "cost" ? (targetValue / tariff) : targetValue;
+  let reductionNeeded = Math.max(0, currentKwh - targetKwh);
+  const availableReductionTotal = analysis.flexibleKwh * REDUCTION_CAP;
+
+  const flexible = analysis.rows.filter(a=>!a.essential).sort((a,b)=>b.kwh-a.kwh);
+  const recommendations = [];
+  let remaining = reductionNeeded;
+  let achievedReduction = 0;
+
+  for(const a of flexible){
+    if(remaining <= 0.001) break;
+    const maxReducibleKwh = a.kwh * REDUCTION_CAP;
+    if(maxReducibleKwh <= 0.001) continue;
+    const desiredReduceKwh = Math.min(maxReducibleKwh, remaining);
+    const proportion = desiredReduceKwh / a.kwh; // fraction of kwh to remove
+
+    let field, oldVal, newVal, unit;
+    if(a.hoursPerDay >= 1){
+      field = "hoursPerDay"; unit = "h/day";
+      oldVal = a.hoursPerDay;
+      let raw = a.hoursPerDay * (1 - proportion);
+      newVal = Math.max(MIN_HOURS_STEP, Math.round(raw / MIN_HOURS_STEP) * MIN_HOURS_STEP);
+      if(newVal >= oldVal) newVal = Math.max(MIN_HOURS_STEP, oldVal - MIN_HOURS_STEP);
+    } else {
+      field = "daysPerMonth"; unit = "days/month";
+      oldVal = a.daysPerMonth;
+      let raw = a.daysPerMonth * (1 - proportion);
+      newVal = Math.max(MIN_DAYS_STEP, Math.round(raw / MIN_DAYS_STEP) * MIN_DAYS_STEP);
+      if(newVal >= oldVal) newVal = Math.max(MIN_DAYS_STEP, oldVal - MIN_DAYS_STEP);
+    }
+
+    const newApplianceState = { ...a, [field]: newVal };
+    const newKwh = applianceKwh(newApplianceState);
+    const kwhDiff = a.kwh - newKwh;
+    if(kwhDiff <= 0.01) continue;
+
+    const costDiff = kwhDiff * tariff;
+    recommendations.push({
+      applianceId: a.id,
+      name: a.name,
+      field, unit,
+      oldVal, newVal,
+      currentKwh: a.kwh, newKwh,
+      kwhDiff, costDiff,
+      watts: a.watts, qty: a.qty,
+      hoursPerDay: a.hoursPerDay, daysPerMonth: a.daysPerMonth,
+      reason: `${a.name} is a high-consumption flexible appliance, making it a practical candidate for adjustment.`,
+      calc: buildRecCalc(a, field, oldVal, newVal)
+    });
+
+    remaining -= kwhDiff;
+    achievedReduction += kwhDiff;
+  }
+
+  const optimizedKwh = currentKwh - achievedReduction;
+  const optimizedCost = optimizedKwh * tariff;
+  const totalDiffKwh = currentKwh - optimizedKwh;
+  const totalDiffCost = currentCost - optimizedCost;
+
+  let feasibility;
+  if(reductionNeeded <= 0.01){ feasibility = "achieved-no-change"; }
+  else if(achievedReduction >= reductionNeeded - 0.5){ feasibility = "achievable"; }
+  else if(achievedReduction > 0){ feasibility = "partial"; }
+  else { feasibility = "not-achievable"; }
+
+  return {
+    currentKwh, currentCost, optimizedKwh, optimizedCost,
+    totalDiffKwh, totalDiffCost,
+    targetType, targetValue, targetKwh,
+    reductionNeeded, availableReductionTotal,
+    recommendations, feasibility,
+    protectedAppliances: analysis.rows.filter(a=>a.essential),
+    flexibleAppliances: analysis.rows.filter(a=>!a.essential)
+  };
+}
+
+function buildRecCalc(a, field, oldVal, newVal){
+  const w = a.watts, q = a.qty;
+  const oldH = field === "hoursPerDay" ? oldVal : a.hoursPerDay;
+  const oldD = field === "daysPerMonth" ? oldVal : a.daysPerMonth;
+  const newH = field === "hoursPerDay" ? newVal : a.hoursPerDay;
+  const newD = field === "daysPerMonth" ? newVal : a.daysPerMonth;
+  const oldKwh = (w*q*oldH*oldD)/1000;
+  const newKwh = (w*q*newH*newD)/1000;
+  return `Current:\n${w} × ${q} × ${fmtNum(oldH)} × ${fmtNum(oldD)} / 1000\n= ${round1(oldKwh)} kWh\n\nOptimized:\n${w} × ${q} × ${fmtNum(newH)} × ${fmtNum(newD)} / 1000\n= ${round1(newKwh)} kWh`;
+}
+
+function localWhatIf(appliance, newHours, newDays, tariff){
+  const currentKwh = applianceKwh(appliance);
+  const currentCost = currentKwh * tariff;
+  const newState = { ...appliance, hoursPerDay: newHours, daysPerMonth: newDays };
+  const newKwh = applianceKwh(newState);
+  const newCost = newKwh * tariff;
+  const diffKwh = newKwh - currentKwh;
+  const diffCost = newCost - currentCost;
+  const pct = currentKwh > 0 ? (diffKwh/currentKwh*100) : 0;
+  return { currentKwh, currentCost, newKwh, newCost, diffKwh, diffCost, pct };
+}
+
+/* ---------- 4. HELPERS ---------- */
+function round1(n){ return Math.round(n*10)/10; }
+function fmtNum(n){ return (Math.round(n*10)/10).toString(); }
+function fmtKwh(n){ return round1(n).toLocaleString('en-IN') + " kWh"; }
+function fmtCost(n){ return "₹" + Math.round(n).toLocaleString('en-IN'); }
+function clamp(n,min,max){ return Math.max(min, Math.min(max,n)); }
+
+function showToast(msg, type="info"){
+  const region = document.getElementById("toast-region");
+  const el = document.createElement("div");
+  el.className = "toast " + type;
+  const icons = {
+    success: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>',
+    error: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+    info: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
+  };
+  el.innerHTML = `<span class="ic">${icons[type]||icons.info}</span><span>${msg}</span>`;
+  region.appendChild(el);
+  setTimeout(()=>{ el.style.opacity="0"; el.style.transition="opacity .3s"; setTimeout(()=>el.remove(),300); }, 3200);
+}
+
+function applianceIconSvg(type){
+  const map = {
+    "AC": '<path d="M2 12h20M6 12v4M10 12v6M14 12v4M18 12v6"/>',
+    "Refrigerator": '<rect x="6" y="2" width="12" height="20" rx="1"/><path d="M6 9h12"/>',
+    "Fan": '<circle cx="12" cy="12" r="2"/><path d="M12 12c0-4 2-8 6-8s2 6-2 8M12 12c-4 0-8 2-8 6s6 2 8-2M12 12c0 4-2 8-6 8s-2-6 2-8M12 12c4 0 8-2 8-6s-6-2-8 2"/>',
+    "Water Heater": '<rect x="7" y="3" width="10" height="18" rx="4"/><path d="M12 8v6"/>',
+    "Washing Machine": '<rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="13" r="5"/><path d="M8 6h.01M11 6h.01"/>',
+    "TV": '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    "Lights": '<path d="M9 18h6M10 21h4M8 12a4 4 0 118 0c0 2-1.5 3-2 4.5H10c-.5-1.5-2-2.5-2-4.5z"/>',
+    "Computer": '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+    "Water Pump": '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+    "Microwave": '<rect x="3" y="6" width="18" height="12" rx="2"/><rect x="6" y="9" width="9" height="6" rx="1"/><circle cx="18" cy="12" r="1"/>',
+    "Iron": '<path d="M3 18h13l4-8H9L3 18z"/><path d="M9 10V6h6"/>'
+  };
+  return map[type] || '<circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/>';
+}
+
+/* ---------- 5. NAVIGATION ---------- */
+const views = ["overview","household","appliances","dashboard","optimizer","whatif","results"];
+function goToView(view){
+  views.forEach(v => {
+    document.getElementById("view-"+v).classList.toggle("active", v===view);
+  });
+  document.querySelectorAll(".nav-item").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.view === view);
+  });
+  document.getElementById("sidebar").classList.remove("open");
+  document.getElementById("sidebarScrim").classList.remove("open");
+  window.scrollTo({top:0, behavior:"smooth"});
+  if(view === "dashboard") renderDashboard();
+  if(view === "optimizer") renderOptimizerView();
+  if(view === "whatif") renderWhatIfView();
+  if(view === "results") renderResultsView();
+  if(typeof refresh3D === "function") setTimeout(refresh3D, 0);
+}
+document.querySelectorAll(".nav-item").forEach(btn => btn.addEventListener("click", () => goToView(btn.dataset.view)));
+document.getElementById("startOptimizingBtn").addEventListener("click", () => goToView("household"));
+
+/* mobile drawer */
+const sidebarEl = document.getElementById("sidebar");
+const scrimEl = document.getElementById("sidebarScrim");
+document.getElementById("hamburgerBtn").addEventListener("click", () => { sidebarEl.classList.add("open"); scrimEl.classList.add("open"); });
+scrimEl.addEventListener("click", () => { sidebarEl.classList.remove("open"); scrimEl.classList.remove("open"); });
+
+/* ---------- 6. DEMO DATA ---------- */
+function buildDemoData(){
+  const household = { people: 4, tariff: 8, targetType: "energy", targetEnergy: 300, targetCost: null };
+  const demoAppliances = [
+    { name:"Refrigerator", type:"Refrigerator", watts:55, qty:1, hoursPerDay:24, daysPerMonth:30, essential:true, period:"" },
+    { name:"AC", type:"AC", watts:1200, qty:1, hoursPerDay:4, daysPerMonth:30, essential:false, period:"Night" },
+    { name:"Fans", type:"Fan", watts:75, qty:3, hoursPerDay:10, daysPerMonth:30, essential:true, period:"" },
+    { name:"Water Heater", type:"Water Heater", watts:2000, qty:1, hoursPerDay:1.5, daysPerMonth:30, essential:false, period:"Morning" },
+    { name:"Washing Machine", type:"Washing Machine", watts:500, qty:1, hoursPerDay:1, daysPerMonth:20, essential:false, period:"" },
+    { name:"TV", type:"TV", watts:120, qty:1, hoursPerDay:4, daysPerMonth:30, essential:false, period:"Evening" },
+    { name:"Lights", type:"Lights", watts:10, qty:6, hoursPerDay:6, daysPerMonth:30, essential:true, period:"" },
+    { name:"Computer", type:"Computer", watts:200, qty:1, hoursPerDay:5, daysPerMonth:26, essential:false, period:"" },
+    { name:"Water Pump", type:"Water Pump", watts:750, qty:1, hoursPerDay:1, daysPerMonth:30, essential:true, period:"" },
+    { name:"Microwave", type:"Microwave", watts:1200, qty:1, hoursPerDay:0.5, daysPerMonth:20, essential:false, period:"" },
+    { name:"Iron", type:"Iron", watts:1000, qty:1, hoursPerDay:0.5, daysPerMonth:12, essential:false, period:"" }
+  ].map(a => ({ id: nextId(), ...a }));
+  return { household, appliances: demoAppliances };
+}
+
+async function loadDemoHousehold(){
+  showToast("Loading demo household…", "info");
+  let source = "local";
+  let data = null;
+  try{
+    const backendData = await Api.getDemoHousehold();
+    data = backendData;
+    source = "backend";
+  }catch(err){
+    data = buildDemoData();
+    source = "local";
+  }
+  appState.household = data.household;
+  appState.appliances = data.appliances;
+  appState.dataSource = source;
+  appState.analysis = null;
+  appState.optimization = null;
+  populateHouseholdForm();
+  renderApplianceGrid();
+  if(source === "local"){
+    showToast("Demo data loaded locally — optimization server unavailable.", "info");
+  } else {
+    showToast("Demo household loaded from server.", "success");
+  }
+  goToView("dashboard");
+  if(typeof refresh3D === "function") setTimeout(refresh3D, 0);
+}
+["loadDemoBtnTop","loadDemoBtnMobile","loadDemoBtnHero","loadDemoBtnHousehold","loadDemoBtnDash","loadDemoBtnOpt","loadDemoBtnWhatif","loadDemoBtnResults"].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) el.addEventListener("click", loadDemoHousehold);
+});
+
+/* ---------- 7. HOUSEHOLD FORM ---------- */
+const hhInputMode = document.getElementById("hhInputMode");
+hhInputMode.addEventListener("click", (e)=>{
+  const btn = e.target.closest("button"); if(!btn) return;
+  hhInputMode.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById("hh-kwh-field").style.display = btn.dataset.mode==="kwh" ? "flex":"none";
+  document.getElementById("hh-bill-field").style.display = btn.dataset.mode==="bill" ? "flex":"none";
+});
+
+function populateHouseholdForm(){
+  if(!appState.household) return;
+  const h = appState.household;
+  document.getElementById("hh-people").value = h.people ?? "";
+  document.getElementById("hh-tariff").value = h.tariff ?? "";
+  document.getElementById("hh-target-energy").value = h.targetEnergy ?? "";
+  document.getElementById("hh-target-cost").value = h.targetCost ?? "";
+}
+
+function setFieldError(inputId, errId, show){
+  document.getElementById(inputId).classList.toggle("invalid", show);
+  document.getElementById(errId).classList.toggle("show", show);
+}
+
+document.getElementById("saveHouseholdBtn").addEventListener("click", async ()=>{
+  const people = parseFloat(document.getElementById("hh-people").value);
+  const tariff = parseFloat(document.getElementById("hh-tariff").value);
+  let valid = true;
+  if(!(people > 0)){ setFieldError("hh-people","err-hh-people",true); valid=false; } else setFieldError("hh-people","err-hh-people",false);
+  if(!(tariff > 0)){ setFieldError("hh-tariff","err-hh-tariff",true); valid=false; } else setFieldError("hh-tariff","err-hh-tariff",false);
+  if(!valid) return;
+
+  const targetEnergy = parseFloat(document.getElementById("hh-target-energy").value) || null;
+  const targetCost = parseFloat(document.getElementById("hh-target-cost").value) || null;
+
+  appState.household = {
+    people, tariff,
+    targetType: appState.household?.targetType || "energy",
+    targetEnergy, targetCost
+  };
+  appState.dataSource = appState.dataSource || "local";
+
+  try{
+    await Api.createHousehold(appState.household);
+  }catch(err){ /* silent fallback — local state already updated */ }
+
+  showToast("Household saved.", "success");
+  goToView("appliances");
+});
+
+/* ---------- 8. APPLIANCE MANAGEMENT ---------- */
+let editingApplianceId = null;
+const applianceModal = document.getElementById("applianceModalBackdrop");
+
+function openApplianceModal(applianceId=null){
+  editingApplianceId = applianceId;
+  const title = document.getElementById("applianceModalTitle");
+  ["af-name","af-watts","af-qty","af-hours","af-days"].forEach(id=>{
+    document.getElementById(id).classList.remove("invalid");
+    const errId = "err-"+id;
+    if(document.getElementById(errId)) document.getElementById(errId).classList.remove("show");
+  });
+
+  if(applianceId){
+    const a = appState.appliances.find(x=>x.id===applianceId);
+    title.textContent = "Edit Appliance";
+    document.getElementById("af-name").value = a.name;
+    document.getElementById("af-type").value = a.type;
+    document.getElementById("af-watts").value = a.watts;
+    document.getElementById("af-qty").value = a.qty;
+    document.getElementById("af-hours").value = a.hoursPerDay;
+    document.getElementById("af-days").value = a.daysPerMonth;
+    document.getElementById("af-period").value = a.period || "";
+    setEssentialToggle(a.essential);
+  } else {
+    title.textContent = "Add Appliance";
+    document.getElementById("af-name").value = "";
+    document.getElementById("af-type").value = "Fan";
+    document.getElementById("af-watts").value = "";
+    document.getElementById("af-qty").value = 1;
+    document.getElementById("af-hours").value = "";
+    document.getElementById("af-days").value = "";
+    document.getElementById("af-period").value = "";
+    setEssentialToggle(false);
+  }
+  applianceModal.classList.add("open");
+}
+function closeApplianceModal(){ applianceModal.classList.remove("open"); editingApplianceId=null; }
+document.getElementById("closeApplianceModal").addEventListener("click", closeApplianceModal);
+document.getElementById("cancelApplianceBtn").addEventListener("click", closeApplianceModal);
+applianceModal.addEventListener("click", (e)=>{ if(e.target===applianceModal) closeApplianceModal(); });
+
+document.getElementById("addApplianceBtn").addEventListener("click", ()=>openApplianceModal());
+document.getElementById("addApplianceBtnEmpty").addEventListener("click", ()=>openApplianceModal());
+
+const essentialToggle = document.getElementById("af-essential-toggle");
+function setEssentialToggle(isEssential){
+  essentialToggle.querySelectorAll("button").forEach(b=>{
+    b.classList.toggle("active", (b.dataset.val==="true") === isEssential);
+  });
+}
+essentialToggle.addEventListener("click",(e)=>{
+  const btn = e.target.closest("button"); if(!btn) return;
+  setEssentialToggle(btn.dataset.val==="true");
+});
+
+document.getElementById("saveApplianceBtn").addEventListener("click", async ()=>{
+  const name = document.getElementById("af-name").value.trim();
+  const type = document.getElementById("af-type").value;
+  const watts = parseFloat(document.getElementById("af-watts").value);
+  const qty = parseFloat(document.getElementById("af-qty").value);
+  const hours = parseFloat(document.getElementById("af-hours").value);
+  const days = parseFloat(document.getElementById("af-days").value);
+  const period = document.getElementById("af-period").value;
+  const essential = essentialToggle.querySelector("button.active").dataset.val === "true";
+
+  let valid = true;
+  if(!name){ setFieldError("af-name","err-af-name",true); valid=false; } else setFieldError("af-name","err-af-name",false);
+  if(!(watts>0)){ setFieldError("af-watts","err-af-watts",true); valid=false; } else setFieldError("af-watts","err-af-watts",false);
+  if(!(qty>0)){ setFieldError("af-qty","err-af-qty",true); valid=false; } else setFieldError("af-qty","err-af-qty",false);
+  if(!(hours>0 && hours<=24)){ setFieldError("af-hours","err-af-hours",true); valid=false; } else setFieldError("af-hours","err-af-hours",false);
+  if(!(days>0 && days<=31)){ setFieldError("af-days","err-af-days",true); valid=false; } else setFieldError("af-days","err-af-days",false);
+  if(!valid) return;
+
+  const payload = { name, type, watts, qty, hoursPerDay:hours, daysPerMonth:days, essential, period };
+
+  if(editingApplianceId){
+    const idx = appState.appliances.findIndex(a=>a.id===editingApplianceId);
+    appState.appliances[idx] = { ...appState.appliances[idx], ...payload };
+    try{ await Api.updateAppliance(editingApplianceId, payload); }catch(e){}
+    showToast("Appliance updated.", "success");
+  } else {
+    const newAppliance = { id: nextId(), ...payload };
+    appState.appliances.push(newAppliance);
+    try{ await Api.saveAppliance("current", payload); }catch(e){}
+    showToast("Appliance added.", "success");
+  }
+  appState.analysis = null; appState.optimization = null;
+  closeApplianceModal();
+  renderApplianceGrid();
+});
+
+function deleteAppliance(id){
+  appState.appliances = appState.appliances.filter(a=>a.id!==id);
+  appState.analysis = null; appState.optimization = null;
+  try{ Api.deleteAppliance(id); }catch(e){}
+  renderApplianceGrid();
+  showToast("Appliance removed.", "info");
+}
+
+function renderApplianceGrid(){
+  const grid = document.getElementById("applianceGrid");
+  const empty = document.getElementById("appliancesEmpty");
+  grid.innerHTML = "";
+  if(appState.appliances.length === 0){
+    empty.style.display = "block";
+    grid.style.display = "none";
+    return;
+  }
+  empty.style.display = "none";
+  grid.style.display = "grid";
+  const tariff = appState.household?.tariff || 0;
+
+  appState.appliances.forEach(a=>{
+    const kwh = applianceKwh(a);
+    const cost = kwh * tariff;
+    const card = document.createElement("div");
+    card.className = "card appliance-card hoverable";
+    card.innerHTML = `
+      <div class="appliance-top">
+        <div class="appliance-icon-name">
+          <div class="appliance-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">${applianceIconSvg(a.type)}</svg></div>
+          <div>
+            <div class="appliance-name">${escapeHtml(a.name)}</div>
+            <div class="appliance-meta">${escapeHtml(a.type)}</div>
+          </div>
+        </div>
+        <span class="badge ${a.essential?"badge-essential":"badge-flexible"}">${a.essential?"Essential":"Flexible"}</span>
+      </div>
+      <div class="appliance-specs">
+        <span><b>${a.watts}</b> W</span>
+        <span><b>${a.qty}</b> unit${a.qty>1?"s":""}</span>
+        <span><b>${fmtNum(a.hoursPerDay)}</b> h/day</span>
+        <span><b>${a.daysPerMonth}</b> days/mo</span>
+      </div>
+      <div class="appliance-result">
+        <div><div class="kwh num">${round1(kwh)} kWh</div><div class="cost num">${fmtCost(cost)} estimated</div></div>
+        <div class="appliance-actions">
+          <button class="icon-link" data-action="view" title="View calculation"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg></button>
+          <button class="icon-link" data-action="edit" title="Edit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+          <button class="icon-link danger" data-action="delete" title="Delete"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/></svg></button>
+        </div>
+      </div>`;
+    card.querySelector('[data-action="view"]').addEventListener("click", ()=>openCalcModal(a.id));
+    card.querySelector('[data-action="edit"]').addEventListener("click", ()=>openApplianceModal(a.id));
+    card.querySelector('[data-action="delete"]').addEventListener("click", ()=>deleteAppliance(a.id));
+    grid.appendChild(card);
+  });
+}
+
+function escapeHtml(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
+
+/* calculation modal */
+const calcModal = document.getElementById("calcModalBackdrop");
+function openCalcModal(applianceId){
+  const a = appState.appliances.find(x=>x.id===applianceId);
+  const tariff = appState.household?.tariff || 0;
+  const kwh = applianceKwh(a);
+  const cost = kwh * tariff;
+  document.getElementById("calcModalTitle").textContent = a.name;
+  document.getElementById("calcEnergyFormula").innerHTML =
+    `${a.watts} W × ${a.qty} × ${fmtNum(a.hoursPerDay)} h × ${a.daysPerMonth} days\n────────────────────────────\n           1000\n\n<span class="result-line">= ${round1(kwh)} kWh/month</span>`;
+  document.getElementById("calcCostFormula").innerHTML =
+    `${round1(kwh)} kWh × ₹${tariff}\n\n<span class="result-line">= ${fmtCost(cost)}/month</span>`;
+  calcModal.classList.add("open");
+}
+document.getElementById("closeCalcModal").addEventListener("click", ()=>calcModal.classList.remove("open"));
+calcModal.addEventListener("click",(e)=>{ if(e.target===calcModal) calcModal.classList.remove("open"); });
+
+/* ---------- 9. DASHBOARD ---------- */
+let chartConsumption, chartCost, chartEssentialFlexible;
+
+async function ensureAnalysis(){
+  if(!appState.household || appState.appliances.length===0) return null;
+  if(appState.analysis) return appState.analysis;
+  try{
+    appState.analysis = await Api.analyzeHousehold({ household: appState.household, appliances: appState.appliances });
+    appState.dataSource = "backend";
+  }catch(err){
+    appState.analysis = localAnalyze(appState.household, appState.appliances);
+    appState.dataSource = "local";
+  }
+  return appState.analysis;
+}
+
+async function renderDashboard(){
+  const content = document.getElementById("dashboardContent");
+  const empty = document.getElementById("dashboardEmpty");
+  const analysis = await ensureAnalysis();
+  if(!analysis){ content.style.display="none"; empty.style.display="block"; return; }
+  empty.style.display="none"; content.style.display="block";
+
+  document.getElementById("kpiEnergy").innerHTML = `${round1(analysis.totalKwh).toLocaleString('en-IN')}<span class="unit">kWh / mo</span>`;
+  document.getElementById("kpiCost").innerHTML = `${fmtCost(analysis.totalCost)}<span class="unit">/ mo</span>`;
+  document.getElementById("kpiCostFoot").textContent = `At ₹${appState.household.tariff}/kWh`;
+  document.getElementById("kpiApplianceCount").textContent = appState.appliances.length;
+  document.getElementById("kpiApplianceFoot").textContent = "tracked in this household";
+  if(analysis.highest){
+    document.getElementById("kpiHighest").textContent = analysis.highest.name;
+    document.getElementById("kpiHighestKwh").textContent = round1(analysis.highest.kwh) + " kWh";
+  }
+  document.getElementById("kpiEssential").innerHTML = `${round1(analysis.essentialKwh)}<span class="unit">kWh</span>`;
+  document.getElementById("kpiFlexible").innerHTML = `${round1(analysis.flexibleKwh)}<span class="unit">kWh</span>`;
+  document.getElementById("kpiSavingOpp").innerHTML = `${round1(analysis.savingOpportunity)}<span class="unit">kWh</span>`;
+
+  renderInsights(analysis.insights);
+  renderCharts(analysis);
+}
+
+function renderInsights(insights){
+  const list = document.getElementById("insightsList");
+  list.innerHTML = "";
+  const iconMap = {
+    high: { icon:'<path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/>', cls:"red" },
+    flexible: { icon:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/>', cls:"green" },
+    essential: { icon:'<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 118 0v4"/>', cls:"blue" },
+    opportunity: { icon:'<path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/>', cls:"amber" }
+  };
+  insights.forEach(ins=>{
+    const conf = iconMap[ins.kind] || iconMap.opportunity;
+    const el = document.createElement("div");
+    el.className = "card insight-card";
+    el.innerHTML = `<div class="insight-icon kpi-icon ${conf.cls}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${conf.icon}</svg></div>
+      <div><div class="insight-title">${escapeHtml(ins.title)}</div><div class="insight-text">${escapeHtml(ins.text)}</div></div>`;
+    list.appendChild(el);
+  });
+}
+
+function chartColors(n){
+  const palette = ["#22C55E","#34D399","#38BDF8","#F59E0B","#A78BFA","#F87171","#FCD34D","#4ADE80","#60A5FA","#FB923C","#2DD4BF"];
+  return Array.from({length:n}, (_,i)=>palette[i%palette.length]);
+}
+
+function renderCharts(analysis){
+  const rows = analysis.rows.slice().sort((a,b)=>b.kwh-a.kwh);
+  const labels = rows.map(r=>r.name);
+  const kwhData = rows.map(r=>round1(r.kwh));
+  const costData = rows.map(r=>Math.round(r.cost));
+  const colors = chartColors(rows.length);
+
+  Chart.defaults.color = "#94A3B8";
+  Chart.defaults.font.family = "Inter";
+  Chart.defaults.borderColor = "rgba(148,163,184,0.12)";
+
+  if(chartConsumption) chartConsumption.destroy();
+  chartConsumption = new Chart(document.getElementById("chartConsumption"), {
+    type:"bar",
+    data:{ labels, datasets:[{ data:kwhData, backgroundColor: colors, borderRadius:6, barThickness: 16 }] },
+    options:{
+      indexAxis:"y", responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=> ctx.parsed.x + " kWh" } } },
+      scales:{ x:{ grid:{ color:"rgba(148,163,184,0.08)" } }, y:{ grid:{ display:false } } }
+    }
+  });
+
+  if(chartCost) chartCost.destroy();
+  chartCost = new Chart(document.getElementById("chartCost"), {
+    type:"doughnut",
+    data:{ labels, datasets:[{ data:costData, backgroundColor: colors, borderWidth:2, borderColor:"#0D1B2A" }] },
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:"62%",
+      plugins:{ legend:{ position:"right", labels:{ boxWidth:10, font:{size:11}, padding:10 } },
+        tooltip:{ callbacks:{ label:(ctx)=> ctx.label + ": ₹" + ctx.parsed.toLocaleString('en-IN') } } }
+    }
+  });
+
+  if(chartEssentialFlexible) chartEssentialFlexible.destroy();
+  chartEssentialFlexible = new Chart(document.getElementById("chartEssentialFlexible"), {
+    type:"doughnut",
+    data:{ labels:["Essential","Flexible"], datasets:[{ data:[round1(analysis.essentialKwh), round1(analysis.flexibleKwh)], backgroundColor:["#38BDF8","#22C55E"], borderWidth:2, borderColor:"#0D1B2A" }] },
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:"68%",
+      plugins:{ legend:{ position:"bottom", labels:{ boxWidth:10, font:{size:11.5}, padding:14 } },
+        tooltip:{ callbacks:{ label:(ctx)=> ctx.label + ": " + ctx.parsed + " kWh" } } }
+    }
+  });
+}
+
+/* ---------- 10. OPTIMIZER ---------- */
+let targetType = "energy";
+
+document.getElementById("targetTypeToggle").addEventListener("click",(e)=>{
+  const btn = e.target.closest("button"); if(!btn) return;
+  targetType = btn.dataset.target;
+  document.getElementById("targetTypeToggle").querySelectorAll("button").forEach(b=>b.classList.toggle("active", b===btn));
+  const label = document.getElementById("optTargetLabel");
+  const prefix = document.getElementById("optTargetPrefix");
+  const suffix = document.getElementById("optTargetSuffix");
+  if(targetType==="energy"){ label.textContent="Target energy"; prefix.style.display="none"; suffix.style.display="inline"; suffix.textContent="kWh"; }
+  else{ label.textContent="Target cost"; prefix.style.display="inline"; suffix.style.display="none"; }
+  updateProgress();
+});
+
+document.getElementById("optTargetInput").addEventListener("input", updateProgress);
+
+async function renderOptimizerView(){
+  const empty = document.getElementById("optimizerEmpty");
+  const content = document.getElementById("optimizerContent");
+  const analysis = await ensureAnalysis();
+  if(!analysis){ empty.style.display="block"; content.style.display="none"; return; }
+  empty.style.display="none"; content.style.display="block";
+
+  document.getElementById("optCurrentKwh").innerHTML = `${round1(analysis.totalKwh)}<span class="unit">kWh</span>`;
+  document.getElementById("optCurrentCost").innerHTML = `${fmtCost(analysis.totalCost)}<span class="unit">/mo</span>`;
+
+  const targetInput = document.getElementById("optTargetInput");
+  if(!targetInput.value){
+    if(targetType==="energy" && appState.household.targetEnergy) targetInput.value = appState.household.targetEnergy;
+    else if(targetType==="cost" && appState.household.targetCost) targetInput.value = appState.household.targetCost;
+    else targetInput.value = Math.round(analysis.totalKwh * 0.85);
+  }
+
+  renderProtectedFlexibleLists(analysis);
+  updateProgress();
+
+  if(appState.optimization){ renderOptimizationResults(appState.optimization); document.getElementById("optimizeResults").style.display="block"; }
+}
+
+function renderProtectedFlexibleLists(analysis){
+  const protectedList = document.getElementById("protectedList");
+  const flexibleList = document.getElementById("flexibleList");
+  const essentialRows = analysis.rows.filter(a=>a.essential);
+  const flexibleRows = analysis.rows.filter(a=>!a.essential).sort((a,b)=>b.kwh-a.kwh);
+
+  protectedList.innerHTML = essentialRows.length ? essentialRows.map(a=>`
+    <div class="protected-row"><div class="protected-name"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 118 0v4"/></svg>${escapeHtml(a.name)}</div><span class="num" style="font-size:12.5px; color:var(--muted);">${round1(a.kwh)} kWh</span></div>
+  `).join("") : `<p style="font-size:12.5px; color:var(--faint);">No essential appliances marked yet.</p>`;
+
+  flexibleList.innerHTML = flexibleRows.length ? flexibleRows.map(a=>`
+    <div class="flexible-row"><div><div class="protected-name" style="font-weight:600;">${escapeHtml(a.name)}</div><div class="flexible-detail">Current: ${fmtNum(a.hoursPerDay)} h/day · ${a.daysPerMonth} days/mo</div></div><span class="num" style="font-size:12.5px; color:var(--primary);">${round1(a.kwh)} kWh</span></div>
+  `).join("") : `<p style="font-size:12.5px; color:var(--faint);">No flexible appliances marked yet.</p>`;
+}
+
+function updateProgress(){
+  const analysis = appState.analysis;
+  if(!analysis) return;
+  const targetVal = parseFloat(document.getElementById("optTargetInput").value) || 0;
+  const currentKwh = analysis.totalKwh;
+  const currentDisplay = targetType==="energy" ? round1(currentKwh) : Math.round(analysis.totalCost);
+  const targetKwh = targetType==="cost" ? (targetVal / appState.household.tariff) : targetVal;
+
+  document.getElementById("progCurrentLabel").textContent = targetType==="energy" ? currentDisplay + " kWh" : "₹"+currentDisplay;
+  document.getElementById("progTargetLabel").textContent = targetType==="energy" ? targetVal + " kWh" : "₹"+targetVal;
+
+  const maxScale = Math.max(currentKwh, targetKwh) * 1.05 || 1;
+  const pct = clamp((targetKwh/maxScale)*100, 0, 100);
+  const curPct = clamp((currentKwh/maxScale)*100, 0, 100);
+  document.getElementById("progressFill").style.width = curPct + "%";
+
+  const marker = document.querySelector(".progress-marker");
+  if(marker) marker.remove();
+  const track = document.getElementById("progressFill").parentElement;
+  const m = document.createElement("div");
+  m.className = "progress-marker";
+  m.style.left = pct + "%";
+  track.appendChild(m);
+
+  const reductionNeeded = currentKwh - targetKwh;
+  const note = document.getElementById("reductionNeededNote");
+  if(reductionNeeded > 0.5){
+    note.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 20V10M12 4v2"/></svg>${round1(reductionNeeded)} kWh reduction needed to reach target`;
+  } else {
+    note.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Your current estimate already meets this target`;
+  }
+}
+
+document.getElementById("findPlanBtn").addEventListener("click", runOptimization);
+
+async function runOptimization(){
+  const btn = document.getElementById("findPlanBtn");
+  const loadingLines = document.getElementById("optLoadingLines");
+  const resultsEl = document.getElementById("optimizeResults");
+  btn.disabled = true;
+  loadingLines.style.display = "block";
+  resultsEl.style.display = "none";
+  document.querySelectorAll(".loading-line").forEach(l=>l.classList.remove("show"));
+
+  const steps = document.querySelectorAll(".loading-line");
+  for(let i=0;i<steps.length;i++){
+    await new Promise(r=>setTimeout(r, 500));
+    steps[i].classList.add("show");
+  }
+
+  const targetVal = parseFloat(document.getElementById("optTargetInput").value) || 0;
+  let result, source;
+  try{
+    result = await Api.optimizeHousehold({ household: appState.household, appliances: appState.appliances, targetType, targetValue: targetVal });
+    source = "backend";
+  }catch(err){
+    result = localOptimize(appState.household, appState.appliances, targetType, targetVal);
+    source = "local";
+  }
+  appState.optimization = result;
+  appState.dataSource = source;
+
+  await new Promise(r=>setTimeout(r, 200));
+  loadingLines.style.display = "none";
+  btn.disabled = false;
+  document.getElementById("localSimBadge").style.display = source==="local" ? "inline-flex" : "none";
+
+  renderOptimizationResults(result);
+  resultsEl.style.display = "block";
+  resultsEl.scrollIntoView({behavior:"smooth", block:"start"});
+}
+
+function renderOptimizationResults(result){
+  document.getElementById("cmpCurrentKwh").textContent = round1(result.currentKwh) + " kWh";
+  document.getElementById("cmpCurrentCost").textContent = fmtCost(result.currentCost);
+  document.getElementById("cmpOptKwh").textContent = round1(result.optimizedKwh) + " kWh";
+  document.getElementById("cmpOptCost").textContent = fmtCost(result.optimizedCost);
+  document.getElementById("savingKwh").textContent = "↓ " + round1(result.totalDiffKwh) + " kWh";
+  document.getElementById("savingCost").textContent = "↓ " + fmtCost(result.totalDiffCost);
+
+  const banner = document.getElementById("feasibilityBanner");
+  let cls, title, text, icon;
+  if(result.feasibility === "achieved-no-change"){
+    cls="achieved"; title="Target already met";
+    text="Your current estimated usage already meets or beats your selected target.";
+    icon='<path d="M20 6L9 17l-5-5"/>';
+  } else if(result.feasibility === "achievable"){
+    cls="achieved"; title="Target achievable";
+    text="The optimization engine found a simulated plan that reaches your selected target without changing protected essential usage.";
+    icon='<path d="M20 6L9 17l-5-5"/>';
+  } else if(result.feasibility === "partial"){
+    cls="partial"; title="Target partially achievable";
+    text="Reaching this target would require more reduction than the currently adjustable usage provides while protecting essential appliances.";
+    icon='<path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>';
+  } else {
+    cls="not"; title="Target not achievable with current flexible usage";
+    text="The reduction required exceeds what's available from flexible appliances. Consider raising the target or reviewing appliance classifications.";
+    icon='<path d="M18 6L6 18M6 6l12 12"/>';
+  }
+  banner.innerHTML = `<div class="feasibility-banner ${cls}"><div class="fi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">${icon}</svg></div><div><h4>${title}</h4><p>${text}</p></div></div>`;
+
+  const list = document.getElementById("recommendationsList");
+  if(result.recommendations.length === 0){
+    list.innerHTML = `<div class="card" style="text-align:center; color:var(--muted); font-size:13px; padding:30px;">No changes needed — you're already within your target.</div>`;
+  } else {
+    list.innerHTML = "";
+    result.recommendations.forEach((rec, idx)=>{
+      const card = document.createElement("div");
+      card.className = "card rec-card";
+      const fieldLabel = rec.field === "hoursPerDay" ? "h/day" : "days/month";
+      card.innerHTML = `
+        <div class="rec-head">
+          <div class="rec-title">
+            <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/></svg></div>
+            <div>
+              <h4>${escapeHtml(rec.name)}</h4>
+              <div class="rec-change">${fmtNum(rec.oldVal)} ${fieldLabel} → ${fmtNum(rec.newVal)} ${fieldLabel}</div>
+            </div>
+          </div>
+          <div class="rec-savings">
+            <div class="k">↓ ${round1(rec.kwhDiff)} kWh</div>
+            <div class="c">↓ ${fmtCost(rec.costDiff)}</div>
+          </div>
+          <svg class="rec-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="rec-body"><div class="rec-body-inner">
+          <div class="rec-why-label">Why this changed</div>
+          <p class="rec-reason">${escapeHtml(rec.reason)}</p>
+          <div class="rec-why-label">Calculation</div>
+          <div class="formula-block">${escapeHtml(rec.calc)}</div>
+        </div></div>`;
+      card.querySelector(".rec-head").addEventListener("click", ()=> card.classList.toggle("open"));
+      list.appendChild(card);
+    });
+  }
+}
+
+/* ---------- 11. WHAT-IF SIMULATOR ---------- */
+let wiCurrentApplianceId = null;
+
+async function renderWhatIfView(){
+  const empty = document.getElementById("whatifEmpty");
+  const content = document.getElementById("whatifContent");
+  if(!appState.household || appState.appliances.length===0){ empty.style.display="block"; content.style.display="none"; return; }
+  empty.style.display="none"; content.style.display="flex";
+
+  const select = document.getElementById("wiApplianceSelect");
+  const prevVal = select.value;
+  select.innerHTML = appState.appliances.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join("");
+  if(prevVal && appState.appliances.some(a=>a.id===prevVal)) select.value = prevVal;
+  wiCurrentApplianceId = select.value;
+  setupWhatIfSliders(wiCurrentApplianceId);
+}
+
+document.getElementById("wiApplianceSelect").addEventListener("change", (e)=>{
+  wiCurrentApplianceId = e.target.value;
+  setupWhatIfSliders(wiCurrentApplianceId);
+});
+document.getElementById("wiResetBtn").addEventListener("click", ()=> setupWhatIfSliders(wiCurrentApplianceId));
+
+function setupWhatIfSliders(applianceId){
+  const a = appState.appliances.find(x=>x.id===applianceId);
+  if(!a) return;
+  const hoursSlider = document.getElementById("wiHoursSlider");
+  const daysSlider = document.getElementById("wiDaysSlider");
+  hoursSlider.value = a.hoursPerDay;
+  daysSlider.value = a.daysPerMonth;
+  document.getElementById("wiHoursVal").textContent = fmtNum(a.hoursPerDay);
+  document.getElementById("wiDaysVal").textContent = a.daysPerMonth;
+  computeWhatIf();
+}
+
+document.getElementById("wiHoursSlider").addEventListener("input", (e)=>{
+  document.getElementById("wiHoursVal").textContent = fmtNum(parseFloat(e.target.value));
+  computeWhatIf();
+});
+document.getElementById("wiDaysSlider").addEventListener("input", (e)=>{
+  document.getElementById("wiDaysVal").textContent = e.target.value;
+  computeWhatIf();
+});
+
+async function computeWhatIf(){
+  const a = appState.appliances.find(x=>x.id===wiCurrentApplianceId);
+  if(!a) return;
+  const newHours = parseFloat(document.getElementById("wiHoursSlider").value);
+  const newDays = parseFloat(document.getElementById("wiDaysSlider").value);
+  const tariff = appState.household.tariff;
+
+  let result;
+  try{
+    result = await Api.runWhatIf({ appliance: a, newHours, newDays, tariff });
+  }catch(err){
+    result = localWhatIf(a, newHours, newDays, tariff);
+  }
+  appState.whatIf = result;
+
+  document.getElementById("wiCurrentKwh").textContent = round1(result.currentKwh) + " kWh";
+  document.getElementById("wiCurrentCost").textContent = fmtCost(result.currentCost);
+  document.getElementById("wiNewKwh").textContent = round1(result.newKwh) + " kWh";
+  document.getElementById("wiNewCost").textContent = fmtCost(result.newCost);
+  const sign = result.diffKwh <= 0 ? "" : "+";
+  document.getElementById("wiDiffKwh").textContent = sign + round1(result.diffKwh) + " kWh";
+  document.getElementById("wiDiffDetail").textContent = `${sign}${fmtCost(result.diffCost).replace('₹', result.diffCost<=0?'-₹':'₹')} · ${sign}${round1(result.pct)}%`;
+}
+
+/* ---------- 12. RESULTS / REPORT ---------- */
+async function renderResultsView(){
+  const empty = document.getElementById("resultsEmpty");
+  const content = document.getElementById("resultsContent");
+  const analysis = await ensureAnalysis();
+  if(!analysis){ empty.style.display="block"; content.style.display="none"; return; }
+  empty.style.display="none"; content.style.display="block";
+
+  document.getElementById("repPeople").textContent = appState.household.people;
+  document.getElementById("repApplianceCount").textContent = appState.appliances.length;
+  document.getElementById("repTariff").textContent = appState.household.tariff;
+  document.getElementById("repCurrentKwh").textContent = round1(analysis.totalKwh) + " kWh";
+  document.getElementById("repCurrentCost").textContent = fmtCost(analysis.totalCost) + " / mo";
+
+  const opt = appState.optimization;
+  const statusEl = document.getElementById("repTargetStatus");
+  if(opt){
+    document.getElementById("repOptKwh").textContent = round1(opt.optimizedKwh) + " kWh";
+    document.getElementById("repOptCost").textContent = fmtCost(opt.optimizedCost) + " / mo";
+    document.getElementById("repDiffKwh").textContent = round1(opt.totalDiffKwh) + " kWh";
+    document.getElementById("repDiffCost").textContent = fmtCost(opt.totalDiffCost);
+
+    const statusMap = {
+      "achieved-no-change": { label:"Achieved", cls:"badge-flexible" },
+      "achievable": { label:"Achieved", cls:"badge-flexible" },
+      "partial": { label:"Partially achievable", cls:"badge-demo" },
+      "not-achievable": { label:"Not achievable", cls:"badge-essential" }
+    };
+    const s = statusMap[opt.feasibility] || statusMap["partial"];
+    statusEl.innerHTML = `<span class="badge ${s.cls}">${s.label}</span>`;
+
+    document.getElementById("repRecommendations").innerHTML = opt.recommendations.length ?
+      opt.recommendations.map(r=>`<li><span>${escapeHtml(r.name)}: ${fmtNum(r.oldVal)} → ${fmtNum(r.newVal)} ${r.field==="hoursPerDay"?"h/day":"days/mo"}</span><b>-${round1(r.kwhDiff)} kWh</b></li>`).join("") :
+      `<li><span>No changes recommended — already within target.</span></li>`;
+  } else {
+    document.getElementById("repOptKwh").textContent = "—";
+    document.getElementById("repOptCost").textContent = "Run the optimizer to see this";
+    document.getElementById("repDiffKwh").textContent = "—";
+    document.getElementById("repDiffCost").textContent = "—";
+    statusEl.innerHTML = `<span class="badge badge-demo">Not yet run</span>`;
+    document.getElementById("repRecommendations").innerHTML = `<li><span>Run the Optimizer to generate recommendations.</span></li>`;
+  }
+
+  const essentialRows = analysis.rows.filter(a=>a.essential);
+  document.getElementById("repProtected").innerHTML = essentialRows.length ?
+    essentialRows.map(a=>`<li><span>${escapeHtml(a.name)}</span><b>${round1(a.kwh)} kWh</b></li>`).join("") :
+    `<li><span>No appliances marked essential.</span></li>`;
+}
+
+document.getElementById("printReportBtn").addEventListener("click", ()=> window.print());
+
+/* ---------- 13. INIT ---------- */
+function init(){
+  if(window.lucide) lucide.createIcons();
+}
+init();
+
+
+/* ---------- 20. 3D DATA VISUALIZATION SYSTEM ---------- */
+function esc3D(v){ return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function icon3D(type){
+  const d = {
+    home:'<path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-6h6v6"/>',
+    AC:'<path d="M3 12h18M6 12v4M10 12v6M14 12v4M18 12v6"/>',
+    TV:'<rect x="3" y="5" width="18" height="13" rx="2"/><path d="M8 21h8M12 18v3"/>',
+    heater:'<rect x="7" y="3" width="10" height="18" rx="4"/><path d="M12 8v6"/>',
+    plan:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+    bolt:'<path d="M13 2 4 13h6l-1 9 9-12h-6z"/>',
+    brain:'<path d="M9 3a3 3 0 0 0-3 3v1a3 3 0 0 0-3 3 3 3 0 0 0 3 3v2a3 3 0 0 0 3 3h2V3zM15 3a3 3 0 0 1 3 3v1a3 3 0 0 1 3 3 3 3 0 0 1-3 3v2a3 3 0 0 1-3 3h-2V3z"/>'
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">${d[type]||d.bolt}</svg>`;
+}
+function stageHead(kicker,title,caption,badge='LIVE MODEL'){
+  return `<div class="ww3d-head"><div><div class="ww3d-kicker">${kicker}</div><div class="ww3d-title">${title}</div><div class="ww3d-caption">${caption}</div></div><div class="ww3d-badge">● ${badge}</div></div>`;
+}
+function stageWrap(cls,head,body){ return `<div class="ww3d-stage ${cls}">${head}<div class="ww3d-world">${body}<div class="ww3d-grid"></div></div></div>`; }
+function node(cls,icon,label,meta=''){ return `<div class="ww3d-node ${cls}"><div class="ww3d-orb">${icon3D(icon)}</div><div class="ww3d-node-label">${esc3D(label)}</div>${meta?`<div class="ww3d-node-meta">${esc3D(meta)}</div>`:''}</div>`; }
+function inject3D(){
+  const specs={
+    overview:()=>{
+      const a=appState.appliances||[]; const an=appState.analysis; const total=an?.totalKwh ?? a.reduce((s,x)=>s+applianceKwh(x),0);
+      const top=a.slice().sort((x,y)=>applianceKwh(y)-applianceKwh(x))[0];
+      const body=`
+        ${node('n-home','home','HOUSEHOLD',a.length?`${a.length} appliances`:'Awaiting setup')}
+        ${node('n-ac','AC',top?.type==='AC'?'AC • highest load':'AC','energy node')}
+        ${node('n-tv','TV','TV','flexible')}
+        ${node('n-heat','heater','HEATER','flexible')}
+        ${node('n-plan','plan','ENERGY PLAN',total?`${round1(total)} kWh`:'analysis')}
+        ${node('n-target','target','TARGET',appState.household?.targetEnergy?`${appState.household.targetEnergy} kWh`:'set goal')}
+        <i class="ww3d-path p1"></i><i class="ww3d-path p2"></i><i class="ww3d-path p3"></i><i class="ww3d-path p4"></i><i class="ww3d-path p5"></i>
+        <i class="ww3d-particle" style="left:12%;top:110px;--dx:74px;--dy:-18px"></i>
+        <i class="ww3d-particle" style="left:34%;top:100px;--dx:70px;--dy:28px;animation-delay:.8s"></i>
+        <i class="ww3d-particle" style="left:58%;top:102px;--dx:68px;--dy:-20px;animation-delay:1.5s"></i>`;
+      return stageWrap('ww-overview',stageHead('3D ENERGY MAP','Energy Flow Universe','Watch household energy move from source → appliances → plan → target. Every node reflects the current WattWise state.'),body);
+    },
+    household:()=>{
+      const h=appState.household||{}; const a=appState.appliances||[]; const people=h.people||0; const tariff=h.tariff||0;
+      const body=`<div class="house-3d"><div class="house-roof"></div><div class="house-front"></div><div class="house-side"></div><div class="house-door"></div><div class="house-window w1"></div><div class="house-window w2"></div><div class="energy-beam"></div></div>
+      <div class="house-stats"><div class="ww-mini-stat"><b>${people||'—'}</b><span>PEOPLE</span></div><div class="ww-mini-stat"><b>${a.length||0}</b><span>APPLIANCES</span></div><div class="ww-mini-stat"><b>${tariff?`₹${tariff}`:'—'}</b><span>TARIFF / kWh</span></div><div class="ww-mini-stat"><b>${h.targetEnergy||'—'}</b><span>TARGET kWh</span></div></div>`;
+      return stageWrap('ww-house',stageHead('3D DIGITAL TWIN','Your Home, Visualized','Configure the household and watch the digital twin update with the same data used by the analysis engine.'),body);
+    },
+    appliances:()=>{
+      const a=appState.appliances||[]; const top=a.slice().sort((x,y)=>applianceKwh(y)-applianceKwh(x)).slice(0,5); const total=a.reduce((s,x)=>s+applianceKwh(x),0);
+      const positions=['a1','a2','a3','a4','a5']; const lines=['l1','l2','l3','l4','l5'];
+      let body=`<div class="hub"><div>${icon3D('bolt')}<strong>ENERGY HUB</strong><small>${round1(total)} kWh / month</small></div></div>`;
+      top.forEach((x,i)=>{body+=node(positions[i],x.type==='AC'?'AC':x.type==='Water Heater'?'heater':x.type==='TV'?'TV':'bolt',x.name,`${round1(applianceKwh(x))} kWh`)+`<i class="a-line ${lines[i]}"></i>`;});
+      if(!top.length) body+=node('a1','bolt','ADD APPLIANCES','network will appear here');
+      return stageWrap('ww-appliance',stageHead('3D LOAD NETWORK','Appliance Energy Network','High-consumption appliances pull a stronger visual energy stream. Essential and flexible loads remain distinct in the underlying model.'),body);
+    },
+    dashboard:()=>{
+      const an=appState.analysis||localAnalyze(appState.household||{tariff:0},appState.appliances||[]); const score=an.totalKwh?clamp(Math.round(100-(an.flexibleKwh/an.totalKwh*25)),0,100):0;
+      const body=`<div class="orbit o1"><i class="orbit-dot"></i></div><div class="orbit o2"><i class="orbit-dot"></i></div><div class="core"><div><b>${score}</b><span>ENERGY SCORE</span></div></div>
+      <div class="dash-stat ds1"><b>${round1(an.totalKwh||0)} kWh</b><span>MONTHLY ENERGY</span></div><div class="dash-stat ds2"><b>${fmtCost(an.totalCost||0)}</b><span>ESTIMATED COST</span></div><div class="dash-stat ds3"><b>${round1(an.essentialKwh||0)} kWh</b><span>ESSENTIAL LOAD</span></div><div class="dash-stat ds4"><b>${round1(an.flexibleKwh||0)} kWh</b><span>FLEXIBLE LOAD</span></div>`;
+      return stageWrap('ww-dashboard',stageHead('3D ENERGY CORE','Energy Command Center','A live visual summary of the same calculations driving your dashboard KPIs and recommendations.'),body);
+    },
+    optimizer:()=>{
+      const o=appState.optimization; const steps=o?['PROFILE LOADED','LOADS ANALYSED','ESSENTIALS PROTECTED','PLAN GENERATED']:['READY TO ANALYSE','LOADS PENDING','TARGET PENDING','PLAN PENDING'];
+      const body=`<div class="engine"><div class="engine-top"></div><div class="engine-face"><div class="engine-core">${icon3D('bolt')}</div></div><div class="engine-side"></div></div><div class="engine-label">OPTIMIZATION ENGINE ${o?'• PLAN READY':'• STANDBY'}</div><div class="engine-step es1">✓ ${steps[0]}</div><div class="engine-step es2">✓ ${steps[1]}</div><div class="engine-step es3">✓ ${steps[2]}</div><div class="engine-step es4">${o?'✓':'○'} ${steps[3]}</div><i class="engine-flow ef1"></i><i class="engine-flow ef2"></i>`;
+      return stageWrap('ww-optimizer',stageHead('3D DECISION ENGINE','Optimization Engine',o?'The engine has produced a plan from the current household state.':'Run the optimizer to turn consumption data into an actionable plan.','ENGINE READY'),body);
+    },
+    whatif:()=>{
+      const w=appState.whatIf; const cur=w?.currentKwh||0, nw=w?.newKwh||cur; const max=Math.max(cur,nw,1); const pct=Math.round(nw/max*100);
+      const body=`<div class="world-card current-world"><h4>◉ CURRENT REALITY</h4><div class="big">${round1(cur)} kWh</div><small>${w?fmtCost(w.currentCost):'Run a simulation to compare'}</small><div class="world-bar"><i style="width:${Math.round(cur/max*100)}%"></i></div></div><div class="reality-link"><span>SIMULATE</span></div><div class="world-card future-world"><h4>✦ WHAT-IF REALITY</h4><div class="big">${round1(nw)} kWh</div><small>${w?fmtCost(w.newCost):'Change an appliance to preview'}</small><div class="world-bar"><i style="width:${pct}%"></i></div></div>`;
+      return stageWrap('ww-whatif',stageHead('3D PARALLEL REALITY','What-If Simulator','Compare the current household with a simulated future state. Changing usage updates the energy model, not just the display.'),body);
+    },
+    results:()=>{
+      const o=appState.optimization; const current=o?.currentKwh||0, opt=o?.optimizedKwh||current, target=o?.targetKwh||appState.household?.targetEnergy||0; const status=o?.feasibility||'pending';
+      const body=`<div class="portal"><div class="result-core"><b>${o?round1(opt):'—'}</b><span>${o?'OPTIMIZED kWh':'RUN OPTIMIZER'}</span></div></div><div class="result-chip rc1"><b>${round1(current)}</b><span>CURRENT kWh</span></div><div class="result-chip rc2"><b>${round1(opt)}</b><span>OPTIMIZED kWh</span></div><div class="result-chip rc3"><b>${target?round1(target):'—'}</b><span>TARGET kWh</span></div><div class="result-chip rc4"><b>${o?esc3D(status.replaceAll('-',' ')).toUpperCase():'AWAITING PLAN'}</b><span>FEASIBILITY</span></div>`;
+      return stageWrap('ww-results',stageHead('3D TARGET PORTAL','From Plan to Target','The final scene turns the optimization result into a visible destination: achievable, partial, or not achievable.'),body);
+    }
+  };
+  Object.entries(specs).forEach(([view,fn])=>{const el=document.getElementById('view-'+view); if(!el) return; const old=el.querySelector('.ww3d-stage'); if(old) old.remove(); const stage=document.createElement('div'); stage.innerHTML=fn(); el.insertBefore(stage.firstElementChild,el.firstElementChild);});
+}
+function refresh3D(){
+  ['overview','household','appliances','dashboard','optimizer','whatif','results'].forEach(v=>{const el=document.getElementById('view-'+v); if(!el) return; const old=el.querySelector('.ww3d-stage'); if(old) old.remove();});
+  inject3D();
+}
+refresh3D();
+
+})();
+</script>
+</body>
+</html>
